@@ -4,8 +4,19 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { SituationPlanElement } from '../sitplan/SituationPlanElement';
+import { colorizeSituationPlanSvg, SituationPlanElement } from '../sitplan/SituationPlanElement';
 import { WallType } from '../sitplan/WallElement';
+
+const PRINTABLE_KRING_COLORS: Array<{ color: string | null; label: string }> = [
+  { color: null, label: 'Standaard (zwart)' },
+  { color: '#005a9c', label: 'Blauw' },
+  { color: '#b00020', label: 'Rood' },
+  { color: '#006b3c', label: 'Groen' },
+  { color: '#6a1b9a', label: 'Paars' },
+  { color: '#a34700', label: 'Oranje' },
+  { color: '#006064', label: 'Turkoois' },
+  { color: '#455a64', label: 'Leigrijs' },
+];
 
 interface SitPlanSidebarProps {
   selectedElement: SituationPlanElement | null;
@@ -30,6 +41,10 @@ export const SitPlanSidebar: React.FC<SitPlanSidebarProps> = ({
   const [rotation, setRotation] = useState<number>(0);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [, setColorRevision] = useState<number>(0);
+  const [colorEditor, setColorEditor] = useState<{
+    kringnaam: string;
+    draftColor: string | null;
+  } | null>(null);
 
   // Excluded types for symbol rendering
   const excludedTypes = [
@@ -214,9 +229,82 @@ export const SitPlanSidebar: React.FC<SitPlanSidebarProps> = ({
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   };
 
-  const updateKringColor = (kringnaam: string, color: string | null) => {
-    onUpdateKringColor(kringnaam, color);
+  const openKringColorEditor = (kringnaam: string) => {
+    setColorEditor({
+      kringnaam,
+      draftColor: structure.sitplan?.getKringColor?.(kringnaam) || null,
+    });
+  };
+
+  const confirmKringColor = () => {
+    if (!colorEditor) return;
+    onUpdateKringColor(colorEditor.kringnaam, colorEditor.draftColor);
     setColorRevision((revision) => revision + 1);
+    setColorEditor(null);
+  };
+
+  const renderKringColorButton = (kringnaam: string) => {
+    const color = structure.sitplan?.getKringColor?.(kringnaam) || '#000000';
+    return (
+      <button
+        type="button"
+        onClick={() => openKringColorEditor(kringnaam)}
+        title={`Kleur voor kring ${kringnaam}`}
+        aria-label={`Kleur voor kring ${kringnaam}`}
+        style={{ width: '27px', height: '22px', padding: '2px', border: '1px solid #aaa', borderRadius: '3px', background: '#fff', cursor: 'pointer' }}
+      >
+        <span style={{ display: 'block', width: '100%', height: '100%', borderRadius: '1px', backgroundColor: color }} />
+      </button>
+    );
+  };
+
+  const renderColorEditor = () => {
+    if (!colorEditor) return null;
+
+    return (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Kleur voor kring ${colorEditor.kringnaam}`}
+        style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)' }}
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setColorEditor(null);
+        }}
+      >
+        <div style={{ width: '330px', padding: '18px', borderRadius: '8px', background: '#fff', boxShadow: '0 8px 30px rgba(0,0,0,0.3)' }}>
+          <h3 style={{ margin: '0 0 4px', fontSize: '16px', color: '#222' }}>Kleur voor kring {colorEditor.kringnaam}</h3>
+          <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#666' }}>Kies een contrastrijke printkleur of een eigen kleur.</p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px' }}>
+            {PRINTABLE_KRING_COLORS.map((option) => {
+              const selected = colorEditor.draftColor === option.color;
+              return (
+                <button
+                  type="button"
+                  key={option.label}
+                  onClick={() => setColorEditor({ ...colorEditor, draftColor: option.color })}
+                  style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '7px', border: selected ? '2px solid #1565c0' : '1px solid #ccc', borderRadius: '4px', background: '#fff', cursor: 'pointer', fontSize: '11px', textAlign: 'left' }}
+                >
+                  <span style={{ width: '22px', height: '22px', flexShrink: 0, border: '1px solid #888', borderRadius: '3px', backgroundColor: option.color || '#000000' }} />
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '12px', fontSize: '12px', color: '#444' }}>
+            Eigen kleur
+            <input
+              type="color"
+              value={colorEditor.draftColor || '#000000'}
+              onChange={(event) => setColorEditor({ ...colorEditor, draftColor: event.target.value })}
+            />
+          </label>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
+            <button type="button" onClick={() => setColorEditor(null)} className="rounded-button">Annuleren</button>
+            <button type="button" onClick={confirmKringColor} className="rounded-button">Bevestigen</button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   // Render symbols from the schema
@@ -347,27 +435,7 @@ export const SitPlanSidebar: React.FC<SitPlanSidebarProps> = ({
             gap: '8px',
           }}>
             <span>{kringName}</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <input
-                type="color"
-                value={structure.sitplan?.getKringColor?.(kringName) || '#000000'}
-                onChange={(event) => updateKringColor(kringName, event.target.value)}
-                title={`Kleur voor kring ${kringName}`}
-                aria-label={`Kleur voor kring ${kringName}`}
-                style={{ width: '26px', height: '22px', padding: 0, border: 0, cursor: 'pointer' }}
-              />
-              {structure.sitplan?.getKringColor?.(kringName) && (
-                <button
-                  type="button"
-                  onClick={() => updateKringColor(kringName, null)}
-                  title="Standaardkleur herstellen"
-                  aria-label={`Standaardkleur voor kring ${kringName} herstellen`}
-                  style={{ border: 0, background: 'transparent', color: '#555', cursor: 'pointer', padding: '0 2px' }}
-                >
-                  ×
-                </button>
-              )}
-            </span>
+            {renderKringColorButton(kringName)}
           </div>
           
           {filteredItems.map((item) => {
@@ -404,9 +472,7 @@ export const SitPlanSidebar: React.FC<SitPlanSidebarProps> = ({
 
               const kringColor = structure.sitplan?.getKringColor?.(kringName);
               if (kringColor) {
-                svgContent = svgContent
-                  .replace(/(stroke|fill)=(["'])black\2/gi, `$1="${kringColor}"`)
-                  .replace(/(stroke|fill)\s*:\s*black\b/gi, `$1:${kringColor}`);
+                svgContent = colorizeSituationPlanSvg(svgContent, kringColor);
               }
               
               return (
@@ -572,26 +638,8 @@ export const SitPlanSidebar: React.FC<SitPlanSidebarProps> = ({
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 7px', borderBottom: '1px solid #eee', fontSize: '11px' }}
                   >
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{kringnaam}</span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
-                      <input
-                        type="color"
-                        value={structure.sitplan?.getKringColor?.(kringnaam) || '#000000'}
-                        onChange={(event) => updateKringColor(kringnaam, event.target.value)}
-                        title={`Kleur voor kring ${kringnaam}`}
-                        aria-label={`Kleur voor kring ${kringnaam}`}
-                        style={{ width: '25px', height: '20px', padding: 0, border: 0, cursor: 'pointer' }}
-                      />
-                      {structure.sitplan?.getKringColor?.(kringnaam) && (
-                        <button
-                          type="button"
-                          onClick={() => updateKringColor(kringnaam, null)}
-                          title="Standaardkleur herstellen"
-                          aria-label={`Standaardkleur voor kring ${kringnaam} herstellen`}
-                          style={{ border: 0, background: 'transparent', color: '#555', cursor: 'pointer', padding: '0 2px' }}
-                        >
-                          ×
-                        </button>
-                      )}
+                    <span style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                      {renderKringColorButton(kringnaam)}
                     </span>
                   </div>
                 ))}
@@ -621,6 +669,7 @@ export const SitPlanSidebar: React.FC<SitPlanSidebarProps> = ({
         }}>
           {renderSymbols()}
         </div>
+        {renderColorEditor()}
       </div>
     );
   }

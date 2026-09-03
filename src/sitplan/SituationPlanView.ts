@@ -727,6 +727,7 @@ export class SituationPlanView {
       let adres = sitPlanElement.getAdres();
       if (sitPlanElement.labelfontsize != null)
         boxlabel.style.fontSize = String(sitPlanElement.labelfontsize) + "px";
+      boxlabel.style.color = sitPlanElement.getKringColor() ?? "black";
       let newadres = adres != null ? htmlspecialchars(adres) : "";
       if (newadres != boxlabel.innerHTML) boxlabel.innerHTML = newadres;
     }

@@ -12,6 +12,24 @@ import { dialogAlert } from "../utils/DialogHelpers";
 export type AdresLocation = "rechts" | "links" | "boven" | "onder";
 export type AdresType = "auto" | "manueel";
 
+/** Kleurt alle zwarte symbooldelen en laat witte/transparante delen intact. */
+export function colorizeSituationPlanSvg(svg: string, color: string): string {
+  if (!/^#[0-9a-f]{6}$/i.test(color)) return svg;
+
+  const coloredSvg = svg
+    .replace(
+      /(stroke|fill)=(["'])(?:black|#000(?:000)?|rgb\(\s*0\s*,\s*0\s*,\s*0\s*\))\2/gi,
+      `$1="${color}"`
+    )
+    .replace(
+      /(stroke|fill)\s*:\s*(?:black|#000(?:000)?|rgb\(\s*0\s*,\s*0\s*,\s*0\s*\))(?=\s*[;"'])/gi,
+      `$1:${color}`
+    );
+
+  // SVG-tekst zonder expliciete fill erft anders altijd zwart.
+  return `<g fill="${color}">${coloredSvg}</g>`;
+}
+
 /**
  * Class SituationPlanElement
  *
@@ -406,6 +424,13 @@ export class SituationPlanElement {
     else return null;
   }
 
+  /** Geeft de ingestelde kringkleur van dit elektrosymbool terug. */
+  getKringColor(): string | null {
+    if (!this.isEendraadschemaSymbool()) return null;
+    const kringnaam = globalThis.structure.findKringName(this.electroItemId);
+    return globalThis.structure.sitplan?.getKringColor(kringnaam) ?? null;
+  }
+
   /**
    * updateElectroItemSVG
    *
@@ -516,13 +541,10 @@ export class SituationPlanElement {
   private getColoredSVG(): string {
     if (!this.isEendraadschemaSymbool()) return this.svg;
 
-    const kringnaam = globalThis.structure.findKringName(this.electroItemId);
-    const color = globalThis.structure.sitplan?.getKringColor(kringnaam);
+    const color = this.getKringColor();
     if (color == null) return this.svg;
 
-    return this.svg
-      .replace(/(stroke|fill)=(["'])black\2/gi, `$1="${color}"`)
-      .replace(/(stroke|fill)\s*:\s*black\b/gi, `$1:${color}`);
+    return colorizeSituationPlanSvg(this.svg, color);
   }
 
   /**
