@@ -59,20 +59,22 @@ export class SituationPlan {
     return this.elements;
   }
 
-  /** Geeft de ingestelde symboolkleur van een kring terug. */
-  getKringColor(kringnaam: string): string | null {
-    return this.kringColors[kringnaam] ?? null;
+  /** Geeft de ingestelde symboolkleur van een kring terug via stabiele kring-ID. */
+  getKringColor(kringId: number | null): string | null {
+    if (kringId == null) return null;
+    return this.kringColors[String(kringId)] ?? null;
   }
 
   /**
    * Stelt de kleur in voor alle symbolen van een kring.
    * Een lege kleur herstelt de standaard zwarte weergave.
    */
-  setKringColor(kringnaam: string, color: string | null): void {
+  setKringColor(kringId: number, color: string | null): void {
+    const key = String(kringId);
     if (color == null || color === "") {
-      delete this.kringColors[kringnaam];
+      delete this.kringColors[key];
     } else if (/^#[0-9a-f]{6}$/i.test(color)) {
-      this.kringColors[kringnaam] = color.toLowerCase();
+      this.kringColors[key] = color.toLowerCase();
     } else {
       return;
     }
@@ -81,7 +83,7 @@ export class SituationPlan {
       const electroItemId = element.getElectroItemId();
       if (
         electroItemId != null &&
-        globalThis.structure.findKringName(electroItemId) === kringnaam
+        globalThis.structure.findKringId(electroItemId) === kringId
       ) {
         element.needsViewUpdate = true;
       }
@@ -468,9 +470,27 @@ export class SituationPlan {
     }
 
     if (json.kringColors != null && typeof json.kringColors === "object") {
-      for (const [kringnaam, color] of Object.entries(json.kringColors)) {
-        if (typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color)) {
-          this.kringColors[kringnaam] = color.toLowerCase();
+      for (const [storedKey, color] of Object.entries(json.kringColors)) {
+        if (typeof color !== "string" || !/^#[0-9a-f]{6}$/i.test(color)) {
+          continue;
+        }
+
+        // Nieuwe bestanden gebruiken kring-ID's. Migreer oudere naam-gebaseerde kleuren.
+        if (/^\d+$/.test(storedKey)) {
+          this.kringColors[storedKey] = color.toLowerCase();
+          continue;
+        }
+
+        for (const item of globalThis.structure?.data ?? []) {
+          const itemName = String(item?.props?.naam ?? "").trim();
+          const storedName = storedKey.trim();
+          if (
+            item?.getType?.() === "Kring" &&
+            (itemName === storedName ||
+              (storedName === "Zonder naam" && itemName === ""))
+          ) {
+            this.kringColors[String(item.id)] = color.toLowerCase();
+          }
         }
       }
     }

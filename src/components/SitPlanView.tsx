@@ -355,8 +355,8 @@ export const SitPlanView: React.FC = () => {
     }
   };
 
-  const handleUpdateKringColor = (kringnaam: string, color: string | null) => {
-    structure?.sitplan?.setKringColor(kringnaam, color);
+  const handleUpdateKringColor = (kringId: number, color: string | null) => {
+    structure?.sitplan?.setKringColor(kringId, color);
     sitPlan.redraw();
     if (undostruct) {
       undostruct.store('updateKringColor');

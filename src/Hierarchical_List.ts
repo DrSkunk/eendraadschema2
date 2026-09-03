@@ -1077,6 +1077,30 @@ export class Hierarchical_List {
   }
 
   /**
+   * Geeft de stabiele ID van de dichtstbijzijnde kring waartoe een element behoort.
+   * Kringkleuren gebruiken deze ID zodat hernoemen of dubbele namen geen kleuren verwisselt.
+   */
+  findKringId(my_id: number): number | null {
+    let ordinal = this.getOrdinalById(my_id);
+    const visited = new Set<number>();
+
+    while (ordinal != null) {
+      const item = this.data[ordinal] as Electro_Item;
+      if (item.getType() === "Kring") return item.id;
+
+      const parentId = item.parent;
+      if (parentId == null || parentId === 0 || visited.has(parentId)) {
+        return null;
+      }
+
+      visited.add(parentId);
+      ordinal = this.getOrdinalById(parentId);
+    }
+
+    return null;
+  }
+
+  /**
    * Deze functie zorgt ervoor dat alle kringen een unieke naam krijgen.
    * Indien autoKringNaam is ingesteld op "auto", dan wordt de naam automatisch gegenereerd.
    * De namen worden gegenereerd in de volgorde van het alfabet, beginnend met "A", "B", ..., "Z", "AA", "AB", ..., "ZZ", "AAA", "AAB", ..., enzovoort.
