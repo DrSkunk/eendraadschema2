@@ -11,6 +11,7 @@ interface SitPlanSidebarProps {
   selectedElement: SituationPlanElement | null;
   onClose: () => void;
   onUpdateElement: (element: SituationPlanElement) => void;
+  onUpdateKringColor: (kringnaam: string, color: string | null) => void;
   structure: any; // TODO: Type this properly
 }
 
@@ -18,6 +19,7 @@ export const SitPlanSidebar: React.FC<SitPlanSidebarProps> = ({
   selectedElement,
   onClose,
   onUpdateElement,
+  onUpdateKringColor,
   structure,
 }) => {
   const [wallType, setWallType] = useState<WallType>('inner');
@@ -27,6 +29,7 @@ export const SitPlanSidebar: React.FC<SitPlanSidebarProps> = ({
   const [height, setHeight] = useState<number>(0);
   const [rotation, setRotation] = useState<number>(0);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [, setColorRevision] = useState<number>(0);
 
   // Excluded types for symbol rendering
   const excludedTypes = [
@@ -198,6 +201,24 @@ export const SitPlanSidebar: React.FC<SitPlanSidebarProps> = ({
     }
   };
 
+  const getKringNames = (): string[] => {
+    const names = new Set<string>();
+
+    for (const item of structure?.data || []) {
+      if (!item) continue;
+      const type = item.getType?.() || '';
+      if (excludedTypes.includes(type) || item.isAttribuut?.()) continue;
+      names.add(structure.findKringName?.(item.id)?.trim() || 'Zonder naam');
+    }
+
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  };
+
+  const updateKringColor = (kringnaam: string, color: string | null) => {
+    onUpdateKringColor(kringnaam, color);
+    setColorRevision((revision) => revision + 1);
+  };
+
   // Render symbols from the schema
   const renderSymbols = () => {
     if (!structure?.data) {
@@ -251,26 +272,19 @@ export const SitPlanSidebar: React.FC<SitPlanSidebarProps> = ({
           continue;
         }
         
-        // Find which group this item belongs to - based on address prefix (letters and numbers)
-        let groupName = 'Overige';
+        // Gebruik dezelfde kringbepaling als het situatieschema en de elementzoeker.
+        let groupName = 'Zonder naam';
         let adresText = '';
-        
+
         try {
+          groupName = structure.findKringName?.(item.id)?.trim() || 'Zonder naam';
           adresText = item.getReadableAdres?.() || '';
         } catch (e) {
           // ignore
         }
-        
+
         if (!adresText && item.props?.adres) {
           adresText = item.props.adres;
-        }
-        
-        // Extract the prefix (everything at the start that is letters/numbers before a dot or space)
-        if (adresText) {
-          const match = adresText.match(/^([A-Za-z0-9]+)/);
-          if (match && match[1]) {
-            groupName = match[1].toUpperCase();
-          }
         }
         
         if (!itemsByKring.has(groupName)) {
@@ -321,14 +335,39 @@ export const SitPlanSidebar: React.FC<SitPlanSidebarProps> = ({
           <div style={{
             padding: '8px 8px',
             backgroundColor: '#e3f2fd',
-            borderLeft: '3px solid #1565c0',
+            borderLeft: `3px solid ${structure.sitplan?.getKringColor?.(kringName) || '#1565c0'}`,
             fontSize: '11px',
             fontWeight: '600',
             color: '#0d47a1',
             marginBottom: '6px',
             cursor: 'default',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '8px',
           }}>
-            {kringName}
+            <span>{kringName}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <input
+                type="color"
+                value={structure.sitplan?.getKringColor?.(kringName) || '#000000'}
+                onChange={(event) => updateKringColor(kringName, event.target.value)}
+                title={`Kleur voor kring ${kringName}`}
+                aria-label={`Kleur voor kring ${kringName}`}
+                style={{ width: '26px', height: '22px', padding: 0, border: 0, cursor: 'pointer' }}
+              />
+              {structure.sitplan?.getKringColor?.(kringName) && (
+                <button
+                  type="button"
+                  onClick={() => updateKringColor(kringName, null)}
+                  title="Standaardkleur herstellen"
+                  aria-label={`Standaardkleur voor kring ${kringName} herstellen`}
+                  style={{ border: 0, background: 'transparent', color: '#555', cursor: 'pointer', padding: '0 2px' }}
+                >
+                  ×
+                </button>
+              )}
+            </span>
           </div>
           
           {filteredItems.map((item) => {
@@ -514,6 +553,44 @@ export const SitPlanSidebar: React.FC<SitPlanSidebarProps> = ({
           <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#666' }}>
             Sleep symbolen naar het canvas
           </p>
+          {getKringNames().length > 0 && (
+            <div style={{ marginTop: '12px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: '#444', marginBottom: '5px' }}>
+                Kringkleuren
+              </div>
+              <div style={{ maxHeight: '120px', overflowY: 'auto', border: '1px solid #dee2e6', borderRadius: '4px' }}>
+                {getKringNames().map((kringnaam) => (
+                  <div
+                    key={kringnaam}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 7px', borderBottom: '1px solid #eee', fontSize: '11px' }}
+                  >
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{kringnaam}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
+                      <input
+                        type="color"
+                        value={structure.sitplan?.getKringColor?.(kringnaam) || '#000000'}
+                        onChange={(event) => updateKringColor(kringnaam, event.target.value)}
+                        title={`Kleur voor kring ${kringnaam}`}
+                        aria-label={`Kleur voor kring ${kringnaam}`}
+                        style={{ width: '25px', height: '20px', padding: 0, border: 0, cursor: 'pointer' }}
+                      />
+                      {structure.sitplan?.getKringColor?.(kringnaam) && (
+                        <button
+                          type="button"
+                          onClick={() => updateKringColor(kringnaam, null)}
+                          title="Standaardkleur herstellen"
+                          aria-label={`Standaardkleur voor kring ${kringnaam} herstellen`}
+                          style={{ border: 0, background: 'transparent', color: '#555', cursor: 'pointer', padding: '0 2px' }}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <input
             type="text"
             placeholder="Zoeken..."

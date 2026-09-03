@@ -355,6 +355,14 @@ export const SitPlanView: React.FC = () => {
     }
   };
 
+  const handleUpdateKringColor = (kringnaam: string, color: string | null) => {
+    structure?.sitplan?.setKringColor(kringnaam, color);
+    sitPlan.redraw();
+    if (undostruct) {
+      undostruct.store('updateKringColor');
+    }
+  };
+
   const handleCloseSidebar = () => {
     setSelectedElement(null);
   };
@@ -1186,6 +1194,7 @@ export const SitPlanView: React.FC = () => {
           selectedElement={selectedElement}
           onClose={handleCloseSidebar}
           onUpdateElement={handleUpdateElement}
+          onUpdateKringColor={handleUpdateKringColor}
           structure={structure}
         />
         

@@ -512,6 +512,19 @@ export class SituationPlanElement {
     return [rotate, spiegel];
   };
 
+  /** Past de zwarte lijnen en vlakken van een elektrosymbool aan naar de kringkleur. */
+  private getColoredSVG(): string {
+    if (!this.isEendraadschemaSymbool()) return this.svg;
+
+    const kringnaam = globalThis.structure.findKringName(this.electroItemId);
+    const color = globalThis.structure.sitplan?.getKringColor(kringnaam);
+    if (color == null) return this.svg;
+
+    return this.svg
+      .replace(/(stroke|fill)=(["'])black\2/gi, `$1="${color}"`)
+      .replace(/(stroke|fill)\s*:\s*black\b/gi, `$1:${color}`);
+  }
+
   /**
    * getScaledSVG
    *
@@ -556,6 +569,7 @@ export class SituationPlanElement {
       }
     }
 
+    const coloredSvg = this.getColoredSVG();
     let posinfo = "";
     let transform = "";
 
@@ -577,7 +591,7 @@ export class SituationPlanElement {
         this.sizex * this.scale
       }px" height="${this.sizey * this.scale}px" viewBox="0 0 ${this.sizex} ${
         this.sizey
-      }">${this.svg}</svg>
+      }">${coloredSvg}</svg>
                     </g>`;
     } else {
       // Indien we de SVG willen gebruiken in een innerHTML van een div element en dit element dan zelf positioneren en roteren
@@ -586,7 +600,7 @@ export class SituationPlanElement {
         this.sizex * this.scale
       }px" height="${this.sizey * this.scale}px" viewBox="0 0 ${this.sizex} ${
         this.sizey
-      }">${this.svg}</svg>`;
+      }">${coloredSvg}</svg>`;
     }
   }
 

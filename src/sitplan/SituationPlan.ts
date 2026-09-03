@@ -26,6 +26,7 @@ export class SituationPlan {
   public activePage: number = 1; // We houden deze bij in situationplan zodat ook wijzigingen van pagina's worden opgeslagen
   private numPages: number = 1;
   private elements: SituationPlanElement[] = [];
+  private kringColors: Record<string, string> = {};
 
   public defaults = {
     fontsize: 11,
@@ -39,6 +40,7 @@ export class SituationPlan {
    */
   dispose() {
     this.elements = [];
+    this.kringColors = {};
     this.numPages = 1;
     this.activePage = 1;
     this.defaults = {
@@ -55,6 +57,35 @@ export class SituationPlan {
 
   getElements(): SituationPlanElement[] {
     return this.elements;
+  }
+
+  /** Geeft de ingestelde symboolkleur van een kring terug. */
+  getKringColor(kringnaam: string): string | null {
+    return this.kringColors[kringnaam] ?? null;
+  }
+
+  /**
+   * Stelt de kleur in voor alle symbolen van een kring.
+   * Een lege kleur herstelt de standaard zwarte weergave.
+   */
+  setKringColor(kringnaam: string, color: string | null): void {
+    if (color == null || color === "") {
+      delete this.kringColors[kringnaam];
+    } else if (/^#[0-9a-f]{6}$/i.test(color)) {
+      this.kringColors[kringnaam] = color.toLowerCase();
+    } else {
+      return;
+    }
+
+    for (const element of this.elements) {
+      const electroItemId = element.getElectroItemId();
+      if (
+        electroItemId != null &&
+        globalThis.structure.findKringName(electroItemId) === kringnaam
+      ) {
+        element.needsViewUpdate = true;
+      }
+    }
   }
 
   /**
@@ -436,6 +467,14 @@ export class SituationPlan {
       Object.assign(this.defaults, json.defaults);
     }
 
+    if (json.kringColors != null && typeof json.kringColors === "object") {
+      for (const [kringnaam, color] of Object.entries(json.kringColors)) {
+        if (typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color)) {
+          this.kringColors[kringnaam] = color.toLowerCase();
+        }
+      }
+    }
+
     if (Array.isArray(json.elements)) {
       this.elements = json.elements.map((element: any) => {
         const newElement = new SituationPlanElement();
@@ -463,6 +502,7 @@ export class SituationPlan {
       numPages: this.numPages,
       activePage: this.activePage,
       defaults: this.defaults,
+      kringColors: this.kringColors,
       elements: elements,
     };
   }
