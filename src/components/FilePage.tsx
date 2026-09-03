@@ -2,11 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../AppContext';
 import { GoogleDrivePanel } from './GoogleDrivePanel';
 import { googleDriveService } from '../storage/GoogleDriveService';
+import {
+  getSaveDestination,
+  onSaveDestinationChange,
+  setSaveDestination,
+  SaveDestination,
+} from '../storage/SaveDestination';
 
 const FilePage: React.FC = () => {
   const { structure, fileAPIobj } = useApp();
   const [disableCompression, setDisableCompression] = useState(false);
   const [saveFormat, setSaveFormat] = useState<'eds' | 'json'>('eds');
+  const [saveDestination, setSaveDestinationState] = useState<SaveDestination>(
+    getSaveDestination
+  );
 
   useEffect(() => {
     // Initialize checkbox state from structure properties
@@ -29,6 +38,11 @@ const FilePage: React.FC = () => {
     }
   }, [structure]);
 
+  useEffect(
+    () => onSaveDestinationChange(setSaveDestinationState),
+    []
+  );
+
   const handleCompressionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const checked = e.target.checked;
     setDisableCompression(checked);
@@ -46,6 +60,7 @@ const FilePage: React.FC = () => {
   };
 
   const handleLoad = async () => {
+    setSaveDestination('disk');
     googleDriveService.clearCurrentFile();
     // Call the global loadClicked function
     if (typeof globalThis.loadClicked === 'function') {
@@ -252,6 +267,90 @@ const FilePage: React.FC = () => {
         </div>
 
         <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+          {/* Opslaglocatie kiezen */}
+          <div
+            style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '24px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+              marginBottom: '24px',
+            }}
+          >
+            <h2 style={{ color: 'var(--primary-color)', fontSize: '20px', fontWeight: 600, margin: '0 0 8px' }}>
+              Waar wilt u opslaan?
+            </h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', margin: '0 0 16px', lineHeight: 1.5 }}>
+              Kies apparaat of Google Drive. U kunt op elk moment wisselen.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+              {([
+                { id: 'disk' as SaveDestination, icon: '💻', title: 'Dit apparaat', text: 'Open en bewaar bestanden op uw computer.' },
+                { id: 'google-drive' as SaveDestination, icon: '☁️', title: 'Google Drive', text: 'Open en bewaar bestanden in uw Drive.' },
+              ]).map((option) => {
+                const selected = saveDestination === option.id;
+                return (
+                  <button
+                    type="button"
+                    key={option.id}
+                    aria-pressed={selected}
+                    onClick={() => setSaveDestination(option.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '14px',
+                      padding: '16px',
+                      borderRadius: '10px',
+                      border: selected ? '2px solid var(--primary-color)' : '1px solid #d1d5db',
+                      background: selected ? '#eff6ff' : 'white',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <span style={{ fontSize: '28px' }}>{option.icon}</span>
+                    <span>
+                      <strong style={{ display: 'block', color: 'var(--text-primary)', fontSize: '15px' }}>{option.title}</strong>
+                      <span style={{ display: 'block', color: 'var(--text-secondary)', fontSize: '12px', marginTop: '3px' }}>{option.text}</span>
+                    </span>
+                    <span aria-hidden="true" style={{ marginLeft: 'auto', color: selected ? 'var(--primary-color)' : '#9ca3af', fontSize: '20px' }}>
+                      {selected ? '●' : '○'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '18px', marginTop: '18px', paddingTop: '16px', borderTop: '1px solid #e5e7eb' }}>
+              <label style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+                Bestandsformaat:{' '}
+                <select
+                  value={saveFormat}
+                  onChange={(event) => setSaveFormat(event.target.value as 'eds' | 'json')}
+                  style={{ marginLeft: '6px', padding: '7px 10px', borderRadius: '6px', border: '1px solid #d1d5db', background: 'white' }}
+                >
+                  <option value="eds">EDS (.eds)</option>
+                  <option value="json">JSON (.json)</option>
+                </select>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '7px', color: 'var(--text-secondary)', fontSize: '13px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={disableCompression}
+                  onChange={handleCompressionChange}
+                  disabled={saveFormat === 'json'}
+                />
+                EDS zonder compressie
+              </label>
+            </div>
+            {saveFormat === 'json' && (
+              <p style={{ color: '#92400e', background: '#fef3c7', padding: '9px 12px', borderRadius: '6px', fontSize: '12px', margin: '12px 0 0' }}>
+                JSON wordt niet ondersteund door oudere app-versies.
+              </p>
+            )}
+          </div>
+
+          {saveDestination === 'disk' && (
+            <>
           {/* Openen Section */}
           <div
             style={{
@@ -329,73 +428,15 @@ const FilePage: React.FC = () => {
             >
               💾 Opslaan
             </h2>
-            <div style={{ marginBottom: '16px' }}>
-              <label
-                style={{
-                  display: 'block',
-                  fontSize: '14px',
-                  color: 'var(--text-secondary)',
-                  marginBottom: '8px',
-                }}
-              >
-                Bestandsformaat:
-              </label>
-              <select
-                value={saveFormat}
-                onChange={(e) => setSaveFormat(e.target.value as 'eds' | 'json')}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  border: '1px solid #d1d5db',
-                  fontSize: '14px',
-                  backgroundColor: 'white',
-                  cursor: 'pointer',
-                }}
-              >
-                <option value="eds">EDS - Eendraadschema (.eds)</option>
-                <option value="json">JSON - Platte tekst (.json)</option>
-              </select>
-            </div>
-            {saveFormat === 'json' && (
-              <div
-                style={{
-                  background: '#fef3c7',
-                  borderLeft: '4px solid #f59e0b',
-                  padding: '12px 16px',
-                  borderRadius: '6px',
-                  marginBottom: '16px',
-                }}
-              >
-                <strong style={{ color: '#92400e' }}>⚠️ Opgelet:</strong>
-                <span style={{ color: '#92400e' }}>
-                  {' '}
-                  JSON-bestanden worden niet ondersteund door oudere versies van deze app.
-                </span>
-              </div>
-            )}
             {renderSaveSection()}
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                cursor: 'pointer',
-                fontSize: '14px',
-                color: 'var(--text-secondary)',
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={disableCompression}
-                onChange={handleCompressionChange}
-                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-              />
-              <span>Opslaan zonder compressie (groter bestand)</span>
-            </label>
           </div>
+            </>
+          )}
 
           {/* Google Drive Section */}
-          <GoogleDrivePanel format={saveFormat} />
+          {saveDestination === 'google-drive' && (
+            <GoogleDrivePanel format={saveFormat} />
+          )}
 
           {/* Samenvoegen Section */}
           <div

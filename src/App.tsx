@@ -15,6 +15,13 @@ import { FileLibraryStorage, EdsFileMetadata } from './storage/FileLibraryStorag
 import { dialogAlert, dialogConfirm } from './utils/DialogHelpers';
 import { initTheme } from './utils/theme';
 import { googleDriveService } from './storage/GoogleDriveService';
+import { saveCurrentStructureToGoogleDrive } from './storage/GoogleDriveActions';
+import {
+  getSaveDestination,
+  onSaveDestinationChange,
+  setSaveDestination,
+  SaveDestination,
+} from './storage/SaveDestination';
 import '../css/all.css';
 
 // Initialize theme as early as possible to avoid a flash of the wrong theme
@@ -36,6 +43,9 @@ const App: React.FC = () => {
   const [recoveryData, setRecoveryData] = useState<{lastSavedStr: string | null, lastSavedInfo: any} | null>(null);
   const [recentFiles, setRecentFiles] = useState<EdsFileMetadata[]>([]);
   const [currentFilename, setCurrentFilename] = useState<string>('');
+  const [saveDestination, setSaveDestinationState] = useState<SaveDestination>(
+    getSaveDestination
+  );
 
   // Load recent files from library
   useEffect(() => {
@@ -66,6 +76,11 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [structure]);
 
+  useEffect(
+    () => onSaveDestinationChange(setSaveDestinationState),
+    []
+  );
+
   // File operations
   const handleNewFile = async () => {
     const confirmed = await dialogConfirm('Nieuw schema', 'Weet u zeker dat u een nieuw schema wilt maken? Niet-opgeslagen wijzigingen gaan verloren.');
@@ -76,6 +91,7 @@ const App: React.FC = () => {
   };
 
   const handleOpenFile = async () => {
+    setSaveDestination('disk');
     googleDriveService.clearCurrentFile();
     // Use the global loadClicked function which handles both modern and legacy file APIs
     const loadClicked = (globalThis as any).loadClicked;
@@ -90,19 +106,29 @@ const App: React.FC = () => {
     return currentFilename.toLowerCase().endsWith('.json') ? 'json' : 'eds';
   };
 
-  const handleSave = () => {
-    const exportjson = (globalThis as any).exportjson;
-    if (exportjson) {
-      exportjson(false, currentSaveFormat()); // Save to current file
+  const saveWithDestination = async (
+    saveAs: boolean,
+    format: 'eds' | 'json' = currentSaveFormat()
+  ) => {
+    if (saveDestination === 'google-drive') {
+      try {
+        await saveCurrentStructureToGoogleDrive(format, saveAs);
+      } catch (error) {
+        console.error('Google Drive save failed:', error);
+        await dialogAlert(
+          'Google Drive',
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+      return;
     }
+
+    const exportjson = (globalThis as any).exportjson;
+    exportjson?.(saveAs, format);
   };
 
-  const handleSaveAs = () => {
-    const exportjson = (globalThis as any).exportjson;
-    if (exportjson) {
-      exportjson(true, currentSaveFormat()); // Save as new file
-    }
-  };
+  const handleSave = () => saveWithDestination(false);
+  const handleSaveAs = () => saveWithDestination(true);
 
   // Define menu items with submenu
   const menuItems: MenuItem[] = [
@@ -113,13 +139,18 @@ const App: React.FC = () => {
         { name: "Nieuw", icon: "➕", action: handleNewFile },
         { name: "Openen...", icon: "📂", action: handleOpenFile },
         { name: "Bibliotheek", icon: "📚", action: () => setCurrentView('library') },
-        { name: "Google Drive...", icon: "☁️", action: () => setCurrentView('file') },
-        { name: "Opslaan", icon: "💾", action: handleSave },
-        { name: "Opslaan als...", icon: "💾", action: handleSaveAs },
-        { name: "Opslaan als JSON...", icon: "📄", action: () => {
-          const exportjson = (globalThis as any).exportjson;
-          if (exportjson) exportjson(true, 'json');
-        }},
+        { name: "Opslaglocatie kiezen...", icon: "⇄", action: () => setCurrentView('file') },
+        {
+          name: saveDestination === 'google-drive' ? "Opslaan in Google Drive" : "Opslaan op apparaat",
+          icon: saveDestination === 'google-drive' ? "☁️" : "💾",
+          action: handleSave,
+        },
+        {
+          name: saveDestination === 'google-drive' ? "Kopie opslaan in Google Drive..." : "Opslaan als...",
+          icon: saveDestination === 'google-drive' ? "☁️" : "💾",
+          action: handleSaveAs,
+        },
+        { name: "Opslaan als JSON...", icon: "📄", action: () => saveWithDestination(true, 'json') },
         ...(recentFiles.length > 0 ? [
           { name: "─────────", icon: "", action: () => {} }, // Divider
           { name: "Recente bestanden:", icon: "🕐", action: () => {} }, // Header
@@ -238,6 +269,7 @@ const App: React.FC = () => {
     try {
       const EDStoStructure = (globalThis as any).EDStoStructure;
       if (EDStoStructure) {
+        setSaveDestination('disk');
         googleDriveService.clearCurrentFile();
         // Clear any existing file handle to prevent save from overwriting filesystem file
         if ((globalThis as any).fileAPIobj) {

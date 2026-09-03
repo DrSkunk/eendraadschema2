@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext';
-import {
-  EDStoStructure,
-  serializeCurrentStructure,
-} from '../importExport/importExport';
+import { EDStoStructure } from '../importExport/importExport';
 import {
   GoogleDriveFile,
   googleDriveService,
 } from '../storage/GoogleDriveService';
-import { dialogAlert, dialogPrompt } from '../utils/DialogHelpers';
+import { dialogAlert } from '../utils/DialogHelpers';
+import {
+  canOverwriteCurrentGoogleDriveFile,
+  saveCurrentStructureToGoogleDrive,
+} from '../storage/GoogleDriveActions';
+import { setSaveDestination } from '../storage/SaveDestination';
 
 interface GoogleDrivePanelProps {
   format: 'eds' | 'json';
@@ -30,7 +32,7 @@ function errorMessage(error: unknown): string {
 }
 
 export const GoogleDrivePanel: React.FC<GoogleDrivePanelProps> = ({ format }) => {
-  const { structure, fileAPIobj, setCurrentView } = useApp();
+  const { fileAPIobj, setCurrentView } = useApp();
   const [files, setFiles] = useState<GoogleDriveFile[]>([]);
   const [showFilePicker, setShowFilePicker] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -38,11 +40,7 @@ export const GoogleDrivePanel: React.FC<GoogleDrivePanelProps> = ({ format }) =>
 
   const configured = googleDriveService.isConfigured();
   const currentDriveFile = googleDriveService.getCurrentFile();
-  const currentFilename = String(structure?.properties?.filename || '');
-  const canOverwriteCurrentDriveFile = Boolean(
-    currentDriveFile &&
-      currentDriveFile.name.toLowerCase() === currentFilename.toLowerCase()
-  );
+  const canOverwriteCurrentDriveFile = canOverwriteCurrentGoogleDriveFile();
 
   const run = async (operation: () => Promise<void>) => {
     setBusy(true);
@@ -74,6 +72,7 @@ export const GoogleDrivePanel: React.FC<GoogleDrivePanelProps> = ({ format }) =>
       googleDriveService.setCurrentFile(file);
       globalThis.structure.properties.filename = file.name;
       fileAPIobj.clear();
+      setSaveDestination('google-drive');
       setShowFilePicker(false);
       setStatus(`${file.name} geopend vanuit Google Drive.`);
       setCurrentView('editor');
@@ -81,36 +80,10 @@ export const GoogleDrivePanel: React.FC<GoogleDrivePanelProps> = ({ format }) =>
 
   const handleSave = (saveAs: boolean) =>
     run(async () => {
-      const serialized = serializeCurrentStructure(format);
-      let filename = serialized.filename;
-
-      const createNewFile = saveAs || !canOverwriteCurrentDriveFile;
-      if (createNewFile) {
-        const chosenName = await dialogPrompt(
-          'Opslaan in Google Drive',
-          'Geef een bestandsnaam op.',
-          filename
-        );
-        if (chosenName == null) return;
-        const trimmedName = chosenName.trim();
-        if (!trimmedName) throw new Error('Bestandsnaam mag niet leeg zijn.');
-        const extension = format === 'json' ? '.json' : '.eds';
-        filename = trimmedName.toLowerCase().endsWith(extension)
-          ? trimmedName
-          : trimmedName.replace(/\.(eds|json)$/i, '') + extension;
+      const savedFile = await saveCurrentStructureToGoogleDrive(format, saveAs);
+      if (savedFile) {
+        setStatus(`${savedFile.name} opgeslagen in Google Drive.`);
       }
-
-      const savedFile = await googleDriveService.saveFile(
-        serialized.content,
-        filename,
-        serialized.mimeType,
-        createNewFile
-      );
-      globalThis.structure.properties.filename = savedFile.name;
-      fileAPIobj.clear();
-      globalThis.autoSaver?.saveManually(`TXT0040000${serialized.rawJson}`);
-      globalThis.propUpload?.(serialized.content);
-      setStatus(`${savedFile.name} opgeslagen in Google Drive.`);
     });
 
   const buttonStyle: React.CSSProperties = {
