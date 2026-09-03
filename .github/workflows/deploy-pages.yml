@@ -18,6 +18,8 @@ jobs:
   build:
     name: Build Pages artifact
     runs-on: ubuntu-latest
+    env:
+      VITE_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1

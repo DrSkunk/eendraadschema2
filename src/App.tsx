@@ -14,6 +14,7 @@ import { FileLibraryView } from './components/FileLibraryView';
 import { FileLibraryStorage, EdsFileMetadata } from './storage/FileLibraryStorage';
 import { dialogAlert, dialogConfirm } from './utils/DialogHelpers';
 import { initTheme } from './utils/theme';
+import { googleDriveService } from './storage/GoogleDriveService';
 import '../css/all.css';
 
 // Initialize theme as early as possible to avoid a flash of the wrong theme
@@ -69,11 +70,13 @@ const App: React.FC = () => {
   const handleNewFile = async () => {
     const confirmed = await dialogConfirm('Nieuw schema', 'Weet u zeker dat u een nieuw schema wilt maken? Niet-opgeslagen wijzigingen gaan verloren.');
     if (confirmed) {
+      googleDriveService.clearCurrentFile();
       setCurrentView('start');
     }
   };
 
   const handleOpenFile = async () => {
+    googleDriveService.clearCurrentFile();
     // Use the global loadClicked function which handles both modern and legacy file APIs
     const loadClicked = (globalThis as any).loadClicked;
     if (loadClicked) {
@@ -110,6 +113,7 @@ const App: React.FC = () => {
         { name: "Nieuw", icon: "➕", action: handleNewFile },
         { name: "Openen...", icon: "📂", action: handleOpenFile },
         { name: "Bibliotheek", icon: "📚", action: () => setCurrentView('library') },
+        { name: "Google Drive...", icon: "☁️", action: () => setCurrentView('file') },
         { name: "Opslaan", icon: "💾", action: handleSave },
         { name: "Opslaan als...", icon: "💾", action: handleSaveAs },
         { name: "Opslaan als JSON...", icon: "📄", action: () => {
@@ -188,6 +192,7 @@ const App: React.FC = () => {
       try {
         const EDStoStructure = (globalThis as any).EDStoStructure;
         if (EDStoStructure) {
+          googleDriveService.clearCurrentFile();
           // Load the autosaved structure
           EDStoStructure(recoveryData.lastSavedStr, true, false);
           
@@ -215,14 +220,17 @@ const App: React.FC = () => {
   };
 
   const handleExampleSelect = (exampleNumber: number) => {
+    googleDriveService.clearCurrentFile();
     setCurrentView('editor');
   };
 
   const handleNewSchema = () => {
+    googleDriveService.clearCurrentFile();
     setCurrentView('start');
   };
 
   const handleLoadFile = () => {
+    googleDriveService.clearCurrentFile();
     setCurrentView('editor');
   };
 
@@ -230,6 +238,7 @@ const App: React.FC = () => {
     try {
       const EDStoStructure = (globalThis as any).EDStoStructure;
       if (EDStoStructure) {
+        googleDriveService.clearCurrentFile();
         // Clear any existing file handle to prevent save from overwriting filesystem file
         if ((globalThis as any).fileAPIobj) {
           (globalThis as any).fileAPIobj.fileHandle = null;

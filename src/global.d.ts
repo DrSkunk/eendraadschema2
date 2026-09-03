@@ -5,6 +5,14 @@ import { Hierarchical_List } from "./Hierarchical_List";
 import { AutoSaver } from "./importExport/AutoSaver";
 
 declare global {
+  interface ImportMetaEnv {
+    readonly VITE_GOOGLE_CLIENT_ID?: string;
+  }
+
+  interface ImportMeta {
+    readonly env: ImportMetaEnv;
+  }
+
   interface GlobalThis {
     session: Session;
     appDocStorage: MultiLevelStorage<any>;

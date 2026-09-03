@@ -73,7 +73,7 @@ Eendraadschema is a browser-based tool for designing one-wire electrical diagram
 
 ### Prerequisites
 
-- Node.js 18 or higher
+- Node.js 20 or higher
 - npm or yarn
 
 ### Installation
@@ -99,6 +99,32 @@ npm run build
 ```
 
 Output is placed in the `dist/` folder.
+
+### Google Drive configuration
+
+Google Drive integration uses Google Identity Services with the narrow
+`drive.file` OAuth scope. Browser code needs a public OAuth client ID, never a
+client secret.
+
+1. Create or select a project in [Google Cloud Console](https://console.cloud.google.com/).
+2. Enable **Google Drive API**.
+3. Configure the OAuth consent screen.
+4. Create an **OAuth 2.0 Client ID** of type **Web application**.
+5. Add authorized JavaScript origins, for example:
+   - `http://localhost:5173`
+   - `https://drskunk.github.io`
+6. Copy `.env.example` to `.env.local` and set:
+
+```bash
+VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+```
+
+For GitHub Pages, create repository variable `GOOGLE_CLIENT_ID` under
+**Settings → Secrets and variables → Actions → Variables**. Deployment workflow
+passes this value to Vite as `VITE_GOOGLE_CLIENT_ID`.
+
+Files remain in user's Drive. App requests access only to Drive files created
+or opened through app.
 
 ## Technical Stack
 

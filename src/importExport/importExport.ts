@@ -27,6 +27,60 @@ function getFilenameWithExtension(
   }
 }
 
+export interface SerializedStructureFile {
+  content: string;
+  filename: string;
+  mimeType: string;
+  rawJson: string;
+}
+
+function uint8ArrayToBase64(uint8Array: Uint8Array): string {
+  const chunkSize = 0x8000;
+  let binaryString = "";
+  for (let i = 0; i < uint8Array.length; i += chunkSize) {
+    binaryString += String.fromCharCode.apply(
+      null,
+      uint8Array.subarray(i, i + chunkSize)
+    );
+  }
+  return btoa(binaryString);
+}
+
+/** Serialiseert huidig schema zonder download, bruikbaar voor lokale en cloudopslag. */
+export function serializeCurrentStructure(
+  format: "eds" | "json" = "eds"
+): SerializedStructureFile {
+  const filename = getFilenameWithExtension(
+    globalThis.structure.properties.filename,
+    format
+  );
+  const rawJson = globalThis.structure.toJsonObject(true);
+  let content = rawJson;
+
+  if (format === "eds") {
+    try {
+      if (globalThis.structure.properties.disableEDSCompression === true) {
+        throw new Error("Compression is disabled");
+      }
+      const encoded = new TextEncoder().encode(rawJson);
+      content = "EDS0040000" + uint8ArrayToBase64(pako.deflate(encoded));
+    } catch (error) {
+      console.log(
+        "Terugvallen naar TXT-uitvoer vanwege compressiefout: " + error
+      );
+      content = "TXT0040000" + rawJson;
+    }
+  }
+
+  return {
+    content,
+    filename,
+    mimeType:
+      format === "json" ? "application/json" : "application/x-eendraadschema",
+    rawJson,
+  };
+}
+
 export class importExportUsingFileAPI {
   saveNeeded: boolean;
   fileHandle: any;
@@ -305,55 +359,10 @@ globalThis.exportjson = (
   format: "eds" | "json" = "eds"
 ) => {
   // Indien de boolean false is en de file API is geïnstalleerd, wordt een normale opslag uitgevoerd (bekende bestandsnaam)
-
-  /**
-   * Converteert een Uint8Array naar een Base64-gecodeerde string.
-   * @param {Uint8Array} uint8Array - De array die moet worden geconverteerd.
-   * @returns {string} De Base64-gecodeerde string.
-   */
-  function uint8ArrayToBase64(uint8Array: Uint8Array): string {
-    const CHUNK_SIZE = 0x8000; // Verwerk 32KB chunks
-    let binaryString = "";
-    for (let i = 0; i < uint8Array.length; i += CHUNK_SIZE) {
-      binaryString += String.fromCharCode.apply(
-        null,
-        uint8Array.subarray(i, i + CHUNK_SIZE)
-      );
-    }
-    return btoa(binaryString);
-  }
-
-  var filename: string = getFilenameWithExtension(
-    globalThis.structure.properties.filename,
-    format
-  );
-
-  let origtext: string = globalThis.structure.toJsonObject(true);
-  let text: string = "";
-
-  if (format === "json") {
-    // Plain JSON: direct, leesbare uitvoer. Niet ondersteund door oudere app-versies.
-    text = origtext;
-  } else {
-    /* We gebruiken de Pako-bibliotheek om de data te entropycoderen
-     * Einddata leest "EDSXXX0000" met XXX een versie en daarna een 64base-encodering van de gedecomprimeerde uitvoer van Pako
-     * filename = "eendraadschema.eds";
-     */
-    // Comprimeer de uitvoerstructuur en bied deze aan als download aan de gebruiker. We zijn momenteel bij versie 004
-    try {
-      if (globalThis.structure.properties.disableEDSCompression == true)
-        throw new Error("Compression is disabled");
-      let encoder = new TextEncoder();
-      let pako_inflated = new Uint8Array(encoder.encode(origtext));
-      let pako_deflated = new Uint8Array(pako.deflate(pako_inflated));
-      text = "EDS0040000" + uint8ArrayToBase64(pako_deflated);
-    } catch (error) {
-      console.log(
-        "Terugvallen naar TXT-uitvoer vanwege compressiefout: " + error
-      );
-      text = "TXT0040000" + origtext;
-    }
-  }
+  const serialized = serializeCurrentStructure(format);
+  const filename = serialized.filename;
+  const origtext = serialized.rawJson;
+  const text = serialized.content;
 
   // Als we naar een reeds geopend bestand schrijven maar het formaat is gewijzigd,
   // moeten we Opslaan als forceren zodat de juiste extensie gebruikt wordt.

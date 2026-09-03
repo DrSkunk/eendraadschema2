@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../AppContext';
+import { GoogleDrivePanel } from './GoogleDrivePanel';
+import { googleDriveService } from '../storage/GoogleDriveService';
 
 const FilePage: React.FC = () => {
   const { structure, fileAPIobj } = useApp();
@@ -44,6 +46,7 @@ const FilePage: React.FC = () => {
   };
 
   const handleLoad = async () => {
+    googleDriveService.clearCurrentFile();
     // Call the global loadClicked function
     if (typeof globalThis.loadClicked === 'function') {
       await globalThis.loadClicked();
@@ -390,6 +393,9 @@ const FilePage: React.FC = () => {
               <span>Opslaan zonder compressie (groter bestand)</span>
             </label>
           </div>
+
+          {/* Google Drive Section */}
+          <GoogleDrivePanel format={saveFormat} />
 
           {/* Samenvoegen Section */}
           <div
