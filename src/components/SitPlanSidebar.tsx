@@ -401,6 +401,13 @@ export const SitPlanSidebar: React.FC<SitPlanSidebarProps> = ({
               } catch (e) {
                 console.warn(`Error getting SVG for item ${item.id}:`, e);
               }
+
+              const kringColor = structure.sitplan?.getKringColor?.(kringName);
+              if (kringColor) {
+                svgContent = svgContent
+                  .replace(/(stroke|fill)=(["'])black\2/gi, `$1="${kringColor}"`)
+                  .replace(/(stroke|fill)\s*:\s*black\b/gi, `$1:${kringColor}`);
+              }
               
               return (
                 <div

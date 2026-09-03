@@ -718,11 +718,9 @@ export class SituationPlanView {
 
     let svg = sitPlanElement.getScaledSVG(); // Deze call past ook viewUpdateNeeded aan en moet dus eerst gebeuren
 
-    if (sitPlanElement.needsViewUpdate) {
+    if (sitPlanElement.needsViewUpdate || box.innerHTML !== svg) {
       sitPlanElement.needsViewUpdate = false;
-
-      if (svg != null) box.innerHTML = svg;
-      else box.innerHTML = "";
+      box.innerHTML = svg ?? "";
     }
 
     if (boxlabel != null) {
