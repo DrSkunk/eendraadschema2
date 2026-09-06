@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useApp } from '../AppContext';
 import { Hierarchical_List } from '../Hierarchical_List';
+import { DiagramDrawing } from './DiagramDrawing';
 import { ContextMenu } from '../sitplan/ContextMenu';
 
 /**
@@ -129,7 +130,7 @@ const SimpleHierarchyView: React.FC = () => {
   }, [showAddModal]);
 
   // Re-render when structure changes
-  const [, forceUpdate] = useState({});
+  const [documentRevision, forceUpdate] = useState({});
   const refresh = useCallback(() => {
     // Sync globalThis.structure to React state to trigger re-render
     if ((globalThis as any).structure) {
@@ -253,14 +254,7 @@ const SimpleHierarchyView: React.FC = () => {
   const selectElement = (id: number) => {
     setSelectedElementId(id);
     
-    // Highlight in SVG
-    document.querySelectorAll('[data-element-id]').forEach((el) => {
-      el.classList.remove('svg-highlighted');
-    });
-    const svgElement = document.querySelector(`[data-element-id="${id}"]`);
-    if (svgElement) {
-      svgElement.classList.add('svg-highlighted');
-    }
+
   };
 
   // Toggle collapse/expand for an element
@@ -1212,234 +1206,12 @@ const SimpleHierarchyView: React.FC = () => {
     return svg;
   };
 
-  // Attach SVG click handlers (React-native implementation)
-  useEffect(() => {
-    // Small delay to ensure SVG is fully rendered
-    const timer = setTimeout(() => {
-      const edsDiv = document.getElementById('EDS');
-      if (!edsDiv) {
-        console.log('EDS div not found');
-        return;
-      }
-
-      const svg = edsDiv.querySelector('svg');
-      if (!svg) {
-        console.log('SVG not found');
-        return;
-      }
-
-      // Find all elements with data-element-id attribute
-      const elements = svg.querySelectorAll('[data-element-id]');
-      console.log(`Found ${elements.length} clickable SVG elements`);
-      
-      // Filter to only get the "deepest" elements (not parent containers)
-      const leafElements = Array.from(elements).filter((element) => {
-        // Check if this element contains other elements with data-element-id
-        const childrenWithId = element.querySelectorAll('[data-element-id]');
-        // Only include if it has no children with data-element-id (it's a leaf)
-        return childrenWithId.length === 0;
-      });
-      console.log(`Found ${leafElements.length} leaf elements for hover`);
-      
-      const handleClick = (e: Event, elementId: number) => {
-        e.stopPropagation();
-        e.preventDefault();
-        
-        // Get the actual clicked element
-        const clickedElement = e.target as SVGElement;
-        console.log(`SVG element clicked: ${elementId}, element:`, clickedElement);
-        
-        setSelectedElementId(elementId);
-        
-        // Scroll to element in list
-        setTimeout(() => {
-          const listElement = document.querySelector(`.simple-hierarchy-item[data-id="${elementId}"]`);
-          if (listElement) {
-            listElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          }
-        }, 50);
-      };
-
-      const handleMouseEnter = (e: Event, element: Element) => {
-        if (!highlightEnabled) return; // Skip if highlighting is disabled
-        e.stopPropagation(); // Prevent parent elements from getting hover effect
-        const svgElement = element as SVGElement;
-        
-        // Store original fill/stroke for restoration
-        (element as any).__originalFill = svgElement.getAttribute('fill') || svgElement.style.fill;
-        (element as any).__originalStroke = svgElement.getAttribute('stroke') || svgElement.style.stroke;
-        
-        // Apply red color
-        svgElement.style.fill = 'red';
-        svgElement.style.stroke = 'red';
-      };
-
-      const handleMouseLeave = (e: Event, element: Element) => {
-        if (!highlightEnabled) return; // Skip if highlighting is disabled
-        e.stopPropagation();
-        const svgElement = element as SVGElement;
-        
-        // Restore original colors
-        const originalFill = (element as any).__originalFill;
-        const originalStroke = (element as any).__originalStroke;
-        
-        if (originalFill) {
-          svgElement.style.fill = originalFill;
-        } else {
-          svgElement.style.fill = '';
-        }
-        
-        if (originalStroke) {
-          svgElement.style.stroke = originalStroke;
-        } else {
-          svgElement.style.stroke = '';
-        }
-      };
-
-      // Attach click and hover handlers only to leaf elements
-      leafElements.forEach((element) => {
-        const elementId = parseInt((element as SVGElement).getAttribute('data-element-id') || '0');
-        if (elementId === 0) return;
-
-        // All elements are clickable with pointer cursor
-        (element as SVGElement).style.cursor = 'pointer';
-        (element as SVGElement).style.transition = 'opacity 0.2s, filter 0.2s';
-        
-        // Add larger clickable area by wrapping element if it's not already a group
-        if (element.tagName !== 'g') {
-          try {
-            const bbox = (element as SVGGraphicsElement).getBBox();
-            const padding = 10; // Pixels of padding around element for easier clicking
-            
-            // Create invisible rect for larger click area
-            const clickArea = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-            clickArea.setAttribute('x', String(bbox.x - padding));
-            clickArea.setAttribute('y', String(bbox.y - padding));
-            clickArea.setAttribute('width', String(bbox.width + padding * 2));
-            clickArea.setAttribute('height', String(bbox.height + padding * 2));
-            clickArea.setAttribute('fill', 'transparent');
-            clickArea.setAttribute('stroke', 'none');
-            clickArea.setAttribute('data-element-id', String(elementId));
-            clickArea.style.cursor = 'pointer';
-            clickArea.style.pointerEvents = 'all';
-            
-            // Insert click area before the element
-            element.parentNode?.insertBefore(clickArea, element);
-            
-            // Add click handler to click area too
-            const clickAreaHandler = (e: Event) => handleClick(e, elementId);
-            clickArea.addEventListener('click', clickAreaHandler);
-            (clickArea as any).__clickHandler = clickAreaHandler;
-          } catch (error) {
-            console.warn('Could not create click area for element', element, error);
-          }
-        }
-        
-        // Add click handler
-        const clickHandler = (e: Event) => handleClick(e, elementId);
-        element.addEventListener('click', clickHandler);
-        (element as any).__clickHandler = clickHandler;
-        
-        // Add hover handlers
-        const mouseEnterHandler = (e: Event) => handleMouseEnter(e, element);
-        const mouseLeaveHandler = (e: Event) => handleMouseLeave(e, element);
-        
-        element.addEventListener('mouseenter', mouseEnterHandler);
-        element.addEventListener('mouseleave', mouseLeaveHandler);
-        
-        // Store handlers for cleanup
-        (element as any).__mouseEnterHandler = mouseEnterHandler;
-        (element as any).__mouseLeaveHandler = mouseLeaveHandler;
-      });
-
-      // Highlight the currently selected element in purple
-      if (selectedElementId && highlightEnabled) {
-        const selectedElements = svg.querySelectorAll(`[data-element-id="${selectedElementId}"]`);
-        selectedElements.forEach((element) => {
-          const svgElement = element as SVGElement;
-          
-          // Create a semi-transparent purple overlay using a rectangle
-          const bbox = (element as any).getBBox?.();
-          if (bbox) {
-            // Remove any existing highlight
-            const existingHighlight = svg.querySelector(`#highlight-${selectedElementId}`);
-            if (existingHighlight) {
-              existingHighlight.remove();
-            }
-            
-            // Create highlight rectangle
-            const highlight = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-            highlight.setAttribute('id', `highlight-${selectedElementId}`);
-            highlight.setAttribute('x', String(bbox.x - 2));
-            highlight.setAttribute('y', String(bbox.y - 2));
-            highlight.setAttribute('width', String(bbox.width + 4));
-            highlight.setAttribute('height', String(bbox.height + 4));
-            highlight.setAttribute('fill', '#667eea');
-            highlight.setAttribute('fill-opacity', '0.2');
-            highlight.setAttribute('stroke', '#667eea');
-            highlight.setAttribute('stroke-width', '2');
-            highlight.setAttribute('rx', '4');
-            highlight.style.pointerEvents = 'none';
-            
-            // Insert before the element to not block it
-            element.parentNode?.insertBefore(highlight, element);
-          }
-        });
-      }
-    }, 100);
-
-    // Cleanup
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [structure, selectedElementId, highlightEnabled]); // Re-attach when structure, selection, or highlight setting changes
-
-  // Attach event handlers to fullscreen SVG
-  useEffect(() => {
-    if (!isFullscreen || !structure) return;
-
-    const timer = setTimeout(() => {
-      const fullscreenEDS = document.getElementById('EDS-fullscreen');
-      if (!fullscreenEDS) return;
-
-      // Same logic as regular SVG
-      const allElements = fullscreenEDS.querySelectorAll('[data-element-id]');
-      const leafElements: Element[] = [];
-      
-      allElements.forEach((element) => {
-        const hasNestedElements = element.querySelectorAll('[data-element-id]').length > 0;
-        if (!hasNestedElements) {
-          leafElements.push(element);
-        }
-      });
-
-      const handleClick = (e: Event, elementId: number) => {
-        e.stopPropagation();
-        e.preventDefault();
-        setSelectedElementId(elementId);
-        
-        const listElement = document.querySelector(`.simple-hierarchy-item[data-id="${elementId}"]`);
-        if (listElement) {
-          listElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-      };
-
-      leafElements.forEach((element) => {
-        const elementId = parseInt((element as SVGElement).getAttribute('data-element-id') || '0');
-        if (elementId === 0) return;
-        
-        const clickHandler = (e: Event) => handleClick(e, elementId);
-        element.addEventListener('click', clickHandler);
-        (element as any).__clickHandler = clickHandler;
-        
-        element.setAttribute('style', (element.getAttribute('style') || '') + ';cursor:pointer;');
-      });
-    }, 100);
-
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [isFullscreen, structure, selectedElementId]);
+  const svgMarkup = useMemo(getSVGContent, [structure, documentRevision]);
+  const handleDrawingSelect = useCallback((elementId: number) => {
+    setSelectedElementId(elementId);
+    document.querySelector(`.simple-hierarchy-item[data-id="${elementId}"]`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, []);
 
   // Get selected element
   const selectedElement = selectedElementId && structure 
@@ -1751,16 +1523,14 @@ const SimpleHierarchyView: React.FC = () => {
               </div>
 
               {/* EDS SVG content */}
-              <div 
-                id="EDS" 
-                style={{ 
-                  width: '100%',
-                  height: '100%',
-                  cursor: isPanning ? 'grabbing' : 'grab',
-                  transform: `translate(${svgPanX}px, ${svgPanY}px) scale(${svgZoom})`,
-                  transformOrigin: 'top left'
-                }}
-                dangerouslySetInnerHTML={{ __html: getSVGContent() }}
+              <DiagramDrawing
+                id="EDS"
+                markup={svgMarkup}
+                zoom={svgZoom} panX={svgPanX} panY={svgPanY}
+                panning={isPanning}
+                selectedId={selectedElementId}
+                highlightEnabled={highlightEnabled}
+                onSelect={handleDrawingSelect}
               />
             </div>
           </div>
@@ -2265,17 +2035,15 @@ const SimpleHierarchyView: React.FC = () => {
             </div>
 
             {/* Fullscreen SVG content */}
-            <div 
-              id="EDS-fullscreen" 
-              style={{ 
-                width: '100%',
-                height: '100%',
-                transform: `translate(${svgPanX}px, ${svgPanY}px) scale(${svgZoom})`,
-                transformOrigin: 'top left',
-                cursor: isPanning ? 'grabbing' : 'grab'
-              }}
-              dangerouslySetInnerHTML={{ __html: getSVGContent() }}
-            />
+              <DiagramDrawing
+                id="EDS-fullscreen"
+                markup={svgMarkup}
+                zoom={svgZoom} panX={svgPanX} panY={svgPanY}
+                panning={isPanning}
+                selectedId={selectedElementId}
+                highlightEnabled={highlightEnabled}
+                onSelect={handleDrawingSelect}
+              />
           </div>
         </div>
       )}

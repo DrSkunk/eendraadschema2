@@ -1,0 +1,92 @@
+import React, { memo, useLayoutEffect, useRef } from 'react';
+
+interface DiagramDrawingProps {
+  id: string;
+  markup: string;
+  zoom: number;
+  panX: number;
+  panY: number;
+  panning: boolean;
+  selectedId: number | null;
+  highlightEnabled: boolean;
+  onSelect: (id: number) => void;
+}
+
+/** React owns the host; generated SVG remains inside this one DOM boundary. */
+export const DiagramDrawing = memo(function DiagramDrawing({
+  id, markup, zoom, panX, panY, panning, selectedId, highlightEnabled, onSelect,
+}: DiagramDrawingProps) {
+  const host = useRef<HTMLDivElement>(null);
+  const hovered = useRef<Element | null>(null);
+
+  // Hit areas are rebuilt only when the diagram changes, never during panning.
+  useLayoutEffect(() => {
+    const areas: SVGRectElement[] = [];
+    host.current?.querySelectorAll<SVGGraphicsElement>('g[data-element-id], svg[data-element-id]').forEach(group => {
+      if (group.querySelector('[data-element-id]')) return;
+      const box = group.getBBox();
+      if (!box.width && !box.height) return;
+      const area = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      area.setAttribute('x', String(box.x - 4));
+      area.setAttribute('y', String(box.y - 4));
+      area.setAttribute('width', String(box.width + 8));
+      area.setAttribute('height', String(box.height + 8));
+      area.setAttribute('fill', 'transparent');
+      area.setAttribute('stroke', 'none');
+      area.setAttribute('data-diagram-hit-area', '');
+      group.insertBefore(area, group.firstChild);
+      areas.push(area);
+    });
+    return () => areas.forEach(area => area.remove());
+  }, [markup]);
+
+  useLayoutEffect(() => {
+    const selected = highlightEnabled && selectedId !== null
+      ? host.current?.querySelectorAll(`[data-element-id="${selectedId}"]`)
+      : [];
+    selected?.forEach(element => element.classList.add('diagram-selected'));
+    return () => selected?.forEach(element => element.classList.remove('diagram-selected'));
+  }, [markup, selectedId, highlightEnabled]);
+
+  useLayoutEffect(() => {
+    hovered.current?.classList.remove('diagram-hover');
+    hovered.current = null;
+  }, [markup, highlightEnabled]);
+
+  const elementAt = (target: EventTarget) => {
+    const element = target instanceof Element ? target.closest('[data-element-id]') : null;
+    return element && host.current?.contains(element) ? element : null;
+  };
+
+  return <div
+    ref={host}
+    id={id}
+    className="diagram-drawing"
+    onClick={event => {
+      const element = elementAt(event.target);
+      const elementId = Number(element?.getAttribute('data-element-id'));
+      if (!Number.isInteger(elementId) || elementId <= 0) return;
+      event.stopPropagation();
+      onSelect(elementId);
+    }}
+    onPointerOver={event => {
+      const element = highlightEnabled ? elementAt(event.target) : null;
+      if (hovered.current === element) return;
+      hovered.current?.classList.remove('diagram-hover');
+      hovered.current = element;
+      element?.classList.add('diagram-hover');
+    }}
+    onPointerLeave={() => {
+      hovered.current?.classList.remove('diagram-hover');
+      hovered.current = null;
+    }}
+    onDragStart={event => event.preventDefault()}
+    style={{
+      width: '100%', height: '100%',
+      cursor: panning ? 'grabbing' : 'grab',
+      transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
+      transformOrigin: 'top left',
+    }}
+    dangerouslySetInnerHTML={{ __html: markup }}
+  />;
+});

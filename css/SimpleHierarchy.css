@@ -300,31 +300,10 @@
   display: block;
 }
 
-/* Make SVG elements more clickable with pointer cursor */
-.simple-svg-container #EDS svg [data-element-id] {
-  cursor: pointer !important;
-}
-
-/* Increase clickable area using CSS (without changing visual appearance) */
-.simple-svg-container #EDS svg g[data-element-id] {
-  cursor: pointer !important;
-}
-
-/* Add padding to text elements for easier clicking */
-.simple-svg-container #EDS svg text[data-element-id] {
-  cursor: pointer !important;
-  padding: 8px;
-}
-
-/* Visual feedback on hover - subtle glow */
-.simple-svg-container #EDS svg [data-element-id]:hover {
-  filter: drop-shadow(0 0 4px rgba(30, 64, 175, 0.5));
-  transition: filter 0.2s ease;
-}
-
-.simple-svg-container #EDS:active {
-  cursor: default;
-}
+/* Shared interaction styles for normal and fullscreen diagrams. */
+.diagram-drawing [data-element-id] { cursor: pointer; }
+.diagram-drawing .diagram-hover { filter: drop-shadow(0 0 3px #dc2626); }
+.diagram-drawing .diagram-selected { filter: drop-shadow(0 0 4px #667eea); }
 
 /* Zoom controls for SVG */
 .svg-zoom-controls {
