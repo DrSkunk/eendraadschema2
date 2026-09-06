@@ -17,8 +17,8 @@ const SimpleHierarchyView: React.FC = () => {
   const [svgPanX, setSvgPanX] = useState(0);
   const [svgPanY, setSvgPanY] = useState(0);
   const [isPanning, setIsPanning] = useState(false);
-  const [panStartX, setPanStartX] = useState(0);
-  const [panStartY, setPanStartY] = useState(0);
+  const panGesture = useRef<{ pointerId: number; x: number; y: number; panX: number; panY: number } | null>(null);
+  const suppressDrawingClick = useRef(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [highlightEnabled, setHighlightEnabled] = useState(true);
   const [collapsedElements, setCollapsedElements] = useState<Set<number>>(new Set());
@@ -1079,58 +1079,20 @@ const SimpleHierarchyView: React.FC = () => {
     setSvgPanY(0);
   };
 
-  // Fit to screen handler - calculates optimal zoom to show all content
   const handleZoomFit = () => {
-    const edsDiv = document.getElementById('EDS');
-    const container = document.querySelector('.simple-svg-container') as HTMLElement;
-    
-    if (!edsDiv || !container) {
-      handleZoomReset();
-      return;
-    }
-
-    const svg = edsDiv.querySelector('svg') as SVGSVGElement;
-    if (!svg) {
-      handleZoomReset();
-      return;
-    }
-
-    // Get SVG dimensions
-    const bbox = svg.getBBox ? svg.getBBox() : null;
-    const viewBox = svg.getAttribute('viewBox');
-    
-    let svgWidth = 0;
-    let svgHeight = 0;
-
-    if (bbox) {
-      svgWidth = bbox.width;
-      svgHeight = bbox.height;
-    } else if (viewBox) {
-      const parts = viewBox.split(' ').map(Number);
-      svgWidth = parts[2];
-      svgHeight = parts[3];
-    } else {
-      svgWidth = svg.clientWidth || 1000;
-      svgHeight = svg.clientHeight || 1000;
-    }
-
-    // Get container dimensions (accounting for padding)
-    const containerWidth = container.clientWidth - 24; // 12px padding on each side
-    const containerHeight = container.clientHeight - 48; // More padding for controls
-
-    if (svgWidth === 0 || svgHeight === 0) {
-      handleZoomReset();
-      return;
-    }
-
-    // Calculate optimal zoom level
-    const zoomWidth = containerWidth / svgWidth;
-    const zoomHeight = containerHeight / svgHeight;
-    const optimalZoom = Math.max(0.1, Math.min(8, Math.min(zoomWidth, zoomHeight) * 0.95)); // 0.95 for margin
-
-    setSvgZoom(optimalZoom);
-    setSvgPanX(0);
-    setSvgPanY(0);
+    const drawing = document.getElementById(isFullscreen ? 'EDS-fullscreen' : 'EDS');
+    const svg = drawing?.querySelector('svg');
+    const container = drawing?.parentElement;
+    if (!svg || !container) return;
+    const width = svg.width.baseVal.value;
+    const height = svg.height.baseVal.value;
+    if (width <= 0 || height <= 0) return;
+    const zoom = Math.max(0.1, Math.min(8,
+      (container.clientWidth - 32) / width,
+      (container.clientHeight - 64) / height));
+    setSvgZoom(zoom);
+    setSvgPanX((container.clientWidth - width * zoom) / 2);
+    setSvgPanY((container.clientHeight - height * zoom) / 2);
   };
 
   // Fullscreen handler
@@ -1161,82 +1123,67 @@ const SimpleHierarchyView: React.FC = () => {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen]);
 
-  // Pan handlers
-  const handlePanStart = (e: React.MouseEvent) => {
-    // Only start pan on middle mouse button or when space is held
-    if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
-      e.preventDefault();
-      setIsPanning(true);
-      setPanStartX(e.clientX - svgPanX);
-      setPanStartY(e.clientY - svgPanY);
+  // A plain click still selects a symbol; dragging pans the fixed viewport.
+  const handlePanStart = (event: React.PointerEvent<HTMLDivElement>) => {
+    if ((event.target as Element).closest('button') || (event.button !== 0 && event.button !== 1)) return;
+    suppressDrawingClick.current = false;
+    panGesture.current = {
+      pointerId: event.pointerId, x: event.clientX, y: event.clientY,
+      panX: svgPanX, panY: svgPanY,
+    };
+    if (event.button === 1) event.preventDefault();
+  };
+
+  const handlePanMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = panGesture.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    const dx = event.clientX - gesture.x;
+    const dy = event.clientY - gesture.y;
+    if (!suppressDrawingClick.current && Math.hypot(dx, dy) < 4) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    suppressDrawingClick.current = true;
+    setIsPanning(true);
+    setSvgPanX(gesture.panX + dx);
+    setSvgPanY(gesture.panY + dy);
+  };
+
+  const handlePanEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (panGesture.current?.pointerId !== event.pointerId) return;
+    panGesture.current = null;
+    setIsPanning(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
     }
   };
 
-  const handlePanMove = useCallback((e: MouseEvent) => {
-    if (isPanning) {
-      e.preventDefault();
-      setSvgPanX(e.clientX - panStartX);
-      setSvgPanY(e.clientY - panStartY);
+  const handleDrawingClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (suppressDrawingClick.current && !(event.target as Element).closest('button')) {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressDrawingClick.current = false;
     }
-  }, [isPanning, panStartX, panStartY]);
+  };
 
-  const handlePanEnd = useCallback(() => {
-    setIsPanning(false);
-  }, []);
-
-  // Setup pan event listeners
+  // Use a single non-passive listener on each fixed viewport, including fullscreen.
   useEffect(() => {
-    if (isPanning) {
-      document.addEventListener('mousemove', handlePanMove);
-      document.addEventListener('mouseup', handlePanEnd);
-      document.body.style.cursor = 'grabbing';
-      document.body.style.userSelect = 'none';
-
-      return () => {
-        document.removeEventListener('mousemove', handlePanMove);
-        document.removeEventListener('mouseup', handlePanEnd);
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-      };
-    }
-  }, [isPanning, handlePanMove, handlePanEnd]);
-
-  // Wheel zoom handler (Ctrl+Scroll or just Scroll)
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    // Only zoom if Ctrl is held, or if the container has focus and no modifier keys are blocking
-    if (!e.ctrlKey && !e.metaKey) return; // Only with Ctrl+Scroll or Cmd+Scroll on Mac
-    
-    e.preventDefault();
-    e.stopPropagation();
-
-    // Zoom with multiplicative factors for smoother experience
-    const zoomDelta = e.deltaY > 0 ? 0.9 : 1.1; // 10% per scroll
-    setSvgZoom((z) => Math.max(0.1, Math.min(8, z * zoomDelta)));
-  }, []);
-
-  // Setup wheel event listener on SVG container
-  useEffect(() => {
-    const edsDiv = document.getElementById('EDS');
-    if (edsDiv) {
-      edsDiv.addEventListener('wheel', handleWheel as any, { passive: false });
-      return () => {
-        edsDiv.removeEventListener('wheel', handleWheel as any);
-      };
-    }
-  }, [handleWheel]);
-
-  // Apply zoom and pan transform to fullscreen SVG
-  useEffect(() => {
-    if (isFullscreen) {
-      const fullscreenEDS = document.getElementById('EDS-fullscreen');
-      if (fullscreenEDS) {
-        const svgElement = fullscreenEDS.querySelector('svg');
-        if (svgElement) {
-          svgElement.style.transform = `translate(${svgPanX}px, ${svgPanY}px) scale(${svgZoom})`;
-          svgElement.style.transformOrigin = 'center center';
-        }
-      }
-    }
+    const containers = document.querySelectorAll<HTMLElement>('.simple-svg-container, .svg-fullscreen-container');
+    const handleWheel = (event: WheelEvent) => {
+      if ((event.target as Element).closest('button')) return;
+      event.preventDefault();
+      const container = event.currentTarget as HTMLElement;
+      const rect = container.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? container.clientHeight : 1);
+      const zoom = Math.max(0.1, Math.min(8, svgZoom * Math.exp(-delta * 0.002)));
+      const ratio = zoom / svgZoom;
+      setSvgPanX(x - (x - svgPanX) * ratio);
+      setSvgPanY(y - (y - svgPanY) * ratio);
+      setSvgZoom(zoom);
+    };
+    containers.forEach(container => container.addEventListener('wheel', handleWheel, { passive: false }));
+    return () => containers.forEach(container => container.removeEventListener('wheel', handleWheel));
   }, [isFullscreen, svgZoom, svgPanX, svgPanY]);
 
   // Get SVG content
@@ -1246,32 +1193,6 @@ const SimpleHierarchyView: React.FC = () => {
     const svgData = structure.toSVG(0, 'horizontal').data;
     const flattenSVGfromString = (globalThis as any).flattenSVGfromString || ((str: string) => str);
     let svg = flattenSVGfromString(svgData, 10);
-    
-    // Extract original viewBox or width/height from SVG
-    const viewBoxMatch = svg.match(/viewBox="([^"]+)"/);
-    const widthMatch = svg.match(/width="([^"]+)"/);
-    const heightMatch = svg.match(/height="([^"]+)"/);
-    
-    let viewBox = '';
-    if (viewBoxMatch) {
-      const [x, y, w, h] = viewBoxMatch[1].split(' ').map(Number);
-      // Scale viewBox inversely to zoom (zoom in = smaller viewBox)
-      const scaledW = w / svgZoom;
-      const scaledH = h / svgZoom;
-      viewBox = `0 0 ${scaledW} ${scaledH}`;
-      svg = svg.replace(/viewBox="[^"]+"/, `viewBox="${viewBox}"`);
-    } else if (widthMatch && heightMatch) {
-      const w = parseFloat(widthMatch[1]);
-      const h = parseFloat(heightMatch[1]);
-      const scaledW = w / svgZoom;
-      const scaledH = h / svgZoom;
-      viewBox = `0 0 ${scaledW} ${scaledH}`;
-      svg = svg.replace(/<svg/, `<svg viewBox="${viewBox}"`);
-    }
-    
-    // Make SVG fill container
-    svg = svg.replace(/width="[^"]+"/, 'width="100%"');
-    svg = svg.replace(/height="[^"]+"/, 'height="100%"');
     
     // Add data-element-id attributes to make SVG interactive
     // The SVG uses id attributes like "svg_p1_0" where the last number is the element ID
@@ -1780,7 +1701,7 @@ const SimpleHierarchyView: React.FC = () => {
           <div id="middle_col_3_inner" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <h3 style={{ margin: '0 0 12px 0', padding: '12px', background: '#f8f9fa', borderRadius: '8px', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span>📐 Tekening</span>
-              <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#666' }}>💡 Shift + klik en sleep om te pannen</span>
+              <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#666' }}>💡 Sleep om te pannen · scroll om te zoomen</span>
             </h3>
             
             <div 
@@ -1796,7 +1717,12 @@ const SimpleHierarchyView: React.FC = () => {
                 overflow: 'hidden',
                 position: 'relative'
               }}
-              onWheel={handleWheel}
+              onPointerDown={handlePanStart}
+              onPointerMove={handlePanMove}
+              onPointerUp={handlePanEnd}
+              onPointerCancel={handlePanEnd}
+              onLostPointerCapture={handlePanEnd}
+              onClickCapture={handleDrawingClick}
             >
               {/* Zoom controls - positioned absolutely inside container */}
               <div className="svg-zoom-controls">
@@ -1827,13 +1753,11 @@ const SimpleHierarchyView: React.FC = () => {
               {/* EDS SVG content */}
               <div 
                 id="EDS" 
-                onMouseDown={handlePanStart}
                 style={{ 
                   width: '100%',
                   height: '100%',
                   cursor: isPanning ? 'grabbing' : 'grab',
-                  transform: `translate(${svgPanX}px, ${svgPanY}px)`,
-                  transition: isPanning ? 'none' : 'transform 0.1s ease-out',
+                  transform: `translate(${svgPanX}px, ${svgPanY}px) scale(${svgZoom})`,
                   transformOrigin: 'top left'
                 }}
                 dangerouslySetInnerHTML={{ __html: getSVGContent() }}
@@ -2308,7 +2232,12 @@ const SimpleHierarchyView: React.FC = () => {
             }
           }}
         >
-          <div className="svg-fullscreen-container">
+          <div className="svg-fullscreen-container" onPointerDown={handlePanStart}
+              onPointerMove={handlePanMove}
+              onPointerUp={handlePanEnd}
+              onPointerCancel={handlePanEnd}
+              onLostPointerCapture={handlePanEnd}
+              onClickCapture={handleDrawingClick}>
             {/* Fullscreen controls */}
             <div className="svg-fullscreen-controls">
               <button className="svg-zoom-btn" onClick={handleZoomIn} title="Zoom in">+</button>
@@ -2338,14 +2267,11 @@ const SimpleHierarchyView: React.FC = () => {
             {/* Fullscreen SVG content */}
             <div 
               id="EDS-fullscreen" 
-              onMouseDown={handlePanStart}
               style={{ 
                 width: '100%',
                 height: '100%',
-                overflow: 'hidden',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                transform: `translate(${svgPanX}px, ${svgPanY}px) scale(${svgZoom})`,
+                transformOrigin: 'top left',
                 cursor: isPanning ? 'grabbing' : 'grab'
               }}
               dangerouslySetInnerHTML={{ __html: getSVGContent() }}
