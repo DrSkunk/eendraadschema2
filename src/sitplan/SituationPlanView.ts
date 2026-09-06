@@ -34,6 +34,8 @@ enum MovableType {
 
 export class SituationPlanView {
   private zoomfactor: number = 1;
+  private disposed = false;
+  private activeTransformCleanup: (() => void) | null = null;
 
   /** Referentie naar meerdere DIV's waar het stuatieplan wordt weergegeven
    *   - paper: hieronder hangen de reële elementen en dit stelt het printable gedeelte van het schema voor
@@ -263,12 +265,28 @@ export class SituationPlanView {
    * Als een element een referentie naar een label heeft, wordt deze verwijderd uit de DOM.
    */
   dispose() {
-    //Verwijder de event manager
+    if (this.disposed) return;
+    this.disposed = true;
     this.event_manager.dispose();
-    //Ga over all situationplanelements and verwijder de bijhorende boxes uit the DOM
-    for (let element of this.sitplan.elements) {
-      if (element.boxref != null) element.boxref.remove();
-      if (element.boxlabelref != null) element.boxlabelref.remove();
+    this.disableWallDrawingMode();
+    this.disableFreeformShapeDrawingMode();
+    this.disableWindowDrawingMode();
+    this.disableDoorDrawingMode();
+    document.removeEventListener("mousemove", this.processDrag);
+    document.removeEventListener("mouseup", this.stopDrag);
+    document.removeEventListener("touchmove", this.processDrag);
+    document.removeEventListener("touchend", this.stopDrag);
+    this.draggedBox = null;
+    this.activeTransformCleanup?.();
+    this.activeTransformCleanup = null;
+    this.layerManager?.destroy();
+    this.contextMenu.dispose();
+    for (const element of this.sitplan.elements) {
+      element.boxref?.remove();
+      element.boxlabelref?.remove();
+      element.boxref = null;
+      element.boxlabelref = null;
+      element.needsViewUpdate = true;
     }
   }
 
@@ -1693,7 +1711,7 @@ export class SituationPlanView {
   attachArrowKeys() {
     this.event_manager.addEventListener(document, "keydown", (event) => {
       this.contextMenu.hide();
-      if (document.getElementById("outerdiv").style.display == "none") return; // Check if we are really in the situationplan, if not, the default scrolling action will be executed by the browser
+      if (this.disposed || !this.canvas.isConnected || document.getElementById("outerdiv")?.style.display === "none") return; // Check if we are really in the situationplan, if not, the default scrolling action will be executed by the browser
       if (document.getElementById("popupOverlay") != null) return; // We need the keys when editing symbol properties.
 
       let selectedBoxes = this.selected
@@ -3250,11 +3268,17 @@ export class SituationPlanView {
       }
     };
 
-    const stopResize = () => {
+    const cleanup = () => {
       document.removeEventListener("mousemove", handleResize);
       document.removeEventListener("mouseup", stopResize);
+      this.activeTransformCleanup = null;
+    };
+    const stopResize = () => {
+      cleanup();
       globalThis.undostruct.store();
     };
+    this.activeTransformCleanup?.();
+    this.activeTransformCleanup = cleanup;
 
     document.addEventListener("mousemove", handleResize);
     document.addEventListener("mouseup", stopResize);
@@ -3320,11 +3344,17 @@ export class SituationPlanView {
       }
     };
 
-    const stopRotation = () => {
+    const cleanup = () => {
       document.removeEventListener("mousemove", handleRotation);
       document.removeEventListener("mouseup", stopRotation);
+      this.activeTransformCleanup = null;
+    };
+    const stopRotation = () => {
+      cleanup();
       globalThis.undostruct.store();
     };
+    this.activeTransformCleanup?.();
+    this.activeTransformCleanup = cleanup;
 
     document.addEventListener("mousemove", handleRotation);
     document.addEventListener("mouseup", stopRotation);
