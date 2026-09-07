@@ -465,8 +465,17 @@ const SimpleHierarchyView: React.FC = () => {
 
     if (electroType === 'Leiding') {
       const parent = targetId ? structure.getElectroItemById(targetId) : null;
-      if (!parent || parent.getType() !== 'Kring') {
-        window.alert('Een kabelwissel moet als kind van een Kring worden toegevoegd.');
+      let current = parent;
+      let isWithinKring = false;
+      while (current) {
+        if (current.getType() === 'Kring') {
+          isWithinKring = true;
+          break;
+        }
+        current = current.getParent();
+      }
+      if (!parent || !isWithinKring) {
+        window.alert('Een kabelwissel moet binnen een Kring worden toegevoegd.');
         return;
       }
       const newItem = structure.createItem(electroType);
@@ -570,6 +579,15 @@ const SimpleHierarchyView: React.FC = () => {
   const getAllowedTypesForInsertion = useCallback((): string[] => {
     if (!structure) return [];
 
+    const isWithinKring = (item: any): boolean => {
+      let current = item;
+      while (current) {
+        if (current.getType?.() === 'Kring') return true;
+        current = current.getParent?.() ?? null;
+      }
+      return false;
+    };
+
     const targetId = insertionTargetId || selectedElementId;
     
     if (insertionMode === 'insert-child') {
@@ -580,7 +598,7 @@ const SimpleHierarchyView: React.FC = () => {
         return [];
       }
       const allowed = electroItem.allowedChilds();
-      return allowed.filter((type: string) => type !== "" && type !== "---" && (type !== 'Leiding' || electroItem.getType() === 'Kring'));
+      return allowed.filter((type: string) => type !== "" && type !== "---" && (type !== 'Leiding' || isWithinKring(electroItem)));
     } else if (insertionMode === 'insert-before' || insertionMode === 'insert-after') {
       // For insert-before/after, get allowed children of the parent
       if (!targetId) return [];
@@ -603,7 +621,7 @@ const SimpleHierarchyView: React.FC = () => {
         return [];
       }
       const allowed = electroItem.allowedChilds();
-      return allowed.filter((type: string) => type !== "" && type !== "---" && (type !== 'Leiding' || electroItem.getType() === 'Kring'));
+      return allowed.filter((type: string) => type !== "" && type !== "---" && (type !== 'Leiding' || isWithinKring(electroItem)));
     }
   }, [insertionMode, insertionTargetId, selectedElementId, structure]);
 
