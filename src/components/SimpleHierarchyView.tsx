@@ -18,6 +18,14 @@ const SimpleHierarchyView: React.FC = () => {
   const [svgPanX, setSvgPanX] = useState(0);
   const [svgPanY, setSvgPanY] = useState(0);
   const [isPanning, setIsPanning] = useState(false);
+  const svgZoomRef = useRef(svgZoom);
+  const svgPanXRef = useRef(svgPanX);
+  const svgPanYRef = useRef(svgPanY);
+  useEffect(() => {
+    svgZoomRef.current = svgZoom;
+    svgPanXRef.current = svgPanX;
+    svgPanYRef.current = svgPanY;
+  }, [svgZoom, svgPanX, svgPanY]);
   const panGesture = useRef<{ pointerId: number; x: number; y: number; panX: number; panY: number } | null>(null);
   const suppressDrawingClick = useRef(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
@@ -1068,6 +1076,9 @@ const SimpleHierarchyView: React.FC = () => {
   const handleZoomIn = () => setSvgZoom((z) => Math.min(z * 1.2, 8));
   const handleZoomOut = () => setSvgZoom((z) => Math.max(z / 1.2, 0.1));
   const handleZoomReset = () => {
+    svgZoomRef.current = 1;
+    svgPanXRef.current = 0;
+    svgPanYRef.current = 0;
     setSvgZoom(1);
     setSvgPanX(0);
     setSvgPanY(0);
@@ -1170,15 +1181,25 @@ const SimpleHierarchyView: React.FC = () => {
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
       const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? container.clientHeight : 1);
-      const zoom = Math.max(0.1, Math.min(8, svgZoom * Math.exp(-delta * 0.002)));
-      const ratio = zoom / svgZoom;
-      setSvgPanX(x - (x - svgPanX) * ratio);
-      setSvgPanY(y - (y - svgPanY) * ratio);
+      const currentZoom = svgZoomRef.current;
+      const currentPanX = svgPanXRef.current;
+      const currentPanY = svgPanYRef.current;
+      const zoom = Math.max(0.1, Math.min(8, currentZoom * Math.exp(-delta * 0.002)));
+      const ratio = zoom / currentZoom;
+      const panX = x - (x - currentPanX) * ratio;
+      const panY = y - (y - currentPanY) * ratio;
+      // Keep the latest transform available to this stable listener. Trackpad
+      // wheel events can arrive before React commits the preceding update.
+      svgZoomRef.current = zoom;
+      svgPanXRef.current = panX;
+      svgPanYRef.current = panY;
+      setSvgPanX(panX);
+      setSvgPanY(panY);
       setSvgZoom(zoom);
     };
     containers.forEach(container => container.addEventListener('wheel', handleWheel, { passive: false }));
     return () => containers.forEach(container => container.removeEventListener('wheel', handleWheel));
-  }, [isFullscreen, svgZoom, svgPanX, svgPanY]);
+  }, [isFullscreen]);
 
   // Get SVG content
   const getSVGContent = () => {
