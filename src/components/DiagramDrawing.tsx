@@ -27,6 +27,7 @@ export const DiagramDrawing = memo(function DiagramDrawing({
       const box = group.getBBox();
       if (!box.width && !box.height) return;
       const area = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      const elementId = group.getAttribute('data-element-id');
       area.setAttribute('x', String(box.x - 4));
       area.setAttribute('y', String(box.y - 4));
       area.setAttribute('width', String(box.width + 8));
@@ -34,6 +35,7 @@ export const DiagramDrawing = memo(function DiagramDrawing({
       area.setAttribute('fill', 'transparent');
       area.setAttribute('stroke', 'none');
       area.setAttribute('data-diagram-hit-area', '');
+      if (elementId) area.setAttribute('data-element-id', elementId);
       // The transparent rectangle is the interaction surface for the whole
       // element, including empty space inside its visible SVG bounds.
       area.setAttribute('pointer-events', 'all');
@@ -44,11 +46,16 @@ export const DiagramDrawing = memo(function DiagramDrawing({
   }, [markup]);
 
   useLayoutEffect(() => {
-    const selected = highlightEnabled && selectedId !== null
-      ? host.current?.querySelectorAll(`[data-element-id="${selectedId}"]`)
+    const selectedElements = highlightEnabled && selectedId !== null
+      ? host.current?.querySelectorAll(`[data-element-id="${selectedId}"]:not([data-diagram-hit-area])`)
       : [];
-    selected?.forEach(element => element.classList.add('diagram-selected'));
-    return () => selected?.forEach(element => element.classList.remove('diagram-selected'));
+    selectedElements?.forEach(element => element.classList.add('diagram-selected'));
+    host.current?.querySelectorAll<SVGElement>('[data-diagram-hit-area]').forEach(area => {
+      const selected = highlightEnabled && selectedId !== null
+        && area.getAttribute('data-element-id') === String(selectedId);
+      area.toggleAttribute('data-selected', selected);
+    });
+    return () => selectedElements?.forEach(element => element.classList.remove('diagram-selected'));
   }, [markup, selectedId, highlightEnabled]);
 
   useLayoutEffect(() => {

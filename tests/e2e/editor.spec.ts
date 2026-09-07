@@ -90,6 +90,16 @@ test('selection survives property edits, undo/redo, zoom and fullscreen', async 
   const row = page.locator('.simple-hierarchy-item').filter({ hasText: 'Contactdoos' }).first();
   const id = await row.getAttribute('data-id');
   await row.locator('.simple-item-content').click({ force: true });
+  await expect(page.locator(`#EDS [data-diagram-hit-area][data-element-id="${id}"]`))
+    .toHaveAttribute('data-selected', '');
+  const secondRow = page.locator('.simple-hierarchy-item').filter({ hasText: 'Lichtpunt' }).first();
+  const secondId = await secondRow.getAttribute('data-id');
+  await secondRow.locator('.simple-item-content').click({ force: true });
+  await expect(page.locator(`#EDS [data-diagram-hit-area][data-element-id="${secondId}"]`))
+    .toHaveAttribute('data-selected', '');
+  await expect(page.locator(`#EDS [data-diagram-hit-area][data-element-id="${id}"]`))
+    .not.toHaveAttribute('data-selected', '');
+  await row.locator('.simple-item-content').click({ force: true });
   const address = page.locator('.simple-properties-form input[id$="_adres"]');
   const oldAddress = await address.inputValue();
   await address.fill('Regression room');
