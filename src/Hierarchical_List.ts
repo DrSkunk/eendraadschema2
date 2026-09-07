@@ -1410,6 +1410,12 @@ export class Hierarchical_List {
             inSVG[elementCounter] = this.data[i].toSVG(); //Maak de tekening
             break;
 
+          case "Leiding":
+            // Keep cable changes inline with the vertical branch. Leiding
+            // renders its own children above the vertical cable segment.
+            inSVG[elementCounter] = this.data[i].toSVG();
+            break;
+
           case "Aansluiting":
             inSVG[elementCounter] = this.data[i].toSVG(); //Maak de tekening
             this.tekenVerticaleLijnIndienKindVanKring(
