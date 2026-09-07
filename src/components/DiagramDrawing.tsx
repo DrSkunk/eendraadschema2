@@ -66,8 +66,18 @@ export const DiagramDrawing = memo(function DiagramDrawing({
   }, [markup, highlightEnabled]);
 
   const elementAt = (target: EventTarget) => {
-    const element = target instanceof Element ? target.closest('[data-element-id]') : null;
+    const element = target instanceof Element
+      ? target.closest('[data-diagram-hit-area], [data-element-id]')
+      : null;
     return element && host.current?.contains(element) ? element : null;
+  };
+
+  const updateHovered = (target: EventTarget) => {
+    const element = highlightEnabled ? elementAt(target) : null;
+    if (hovered.current === element) return;
+    hovered.current?.classList.remove('diagram-hover');
+    hovered.current = element;
+    element?.classList.add('diagram-hover');
   };
 
   return <div
@@ -81,13 +91,8 @@ export const DiagramDrawing = memo(function DiagramDrawing({
       event.stopPropagation();
       onSelect(elementId);
     }}
-    onPointerOver={event => {
-      const element = highlightEnabled ? elementAt(event.target) : null;
-      if (hovered.current === element) return;
-      hovered.current?.classList.remove('diagram-hover');
-      hovered.current = element;
-      element?.classList.add('diagram-hover');
-    }}
+    onPointerOver={event => updateHovered(event.target)}
+    onPointerMove={event => updateHovered(event.target)}
     onPointerLeave={() => {
       hovered.current?.classList.remove('diagram-hover');
       hovered.current = null;
