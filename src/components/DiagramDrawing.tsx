@@ -84,8 +84,12 @@ export const DiagramDrawing = memo(function DiagramDrawing({
     style={{
       width: '100%', height: '100%',
       cursor: panning ? 'grabbing' : 'grab',
-      transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
+      // Keep the drawing on its own compositor layer while wheel events update
+      // the transform. This avoids subpixel repaint jitter on large SVGs.
+      transform: `translate3d(${panX}px, ${panY}px, 0) scale(${zoom})`,
       transformOrigin: 'top left',
+      willChange: 'transform',
+      backfaceVisibility: 'hidden',
     }}
     dangerouslySetInnerHTML={{ __html: markup }}
   />;
