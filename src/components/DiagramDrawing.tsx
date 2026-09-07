@@ -43,7 +43,9 @@ export const DiagramDrawing = memo(function DiagramDrawing({
       areas.push(area);
     });
     return () => areas.forEach(area => area.remove());
-  }, [markup]);
+  // React can replace dangerously-set inner HTML during selection updates;
+  // rebuild the interaction rectangles whenever that host is rendered again.
+  }, [markup, selectedId, highlightEnabled]);
 
   useLayoutEffect(() => {
     const selectedElements = highlightEnabled && selectedId !== null
