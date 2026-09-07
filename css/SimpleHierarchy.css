@@ -304,6 +304,22 @@
 .diagram-drawing [data-element-id] { cursor: pointer; }
 .diagram-drawing .diagram-hover { filter: drop-shadow(0 0 3px #dc2626); }
 .diagram-drawing .diagram-selected { filter: drop-shadow(0 0 4px #667eea); }
+.diagram-drawing [data-diagram-hit-area] {
+  fill: transparent;
+  pointer-events: none;
+  vector-effect: non-scaling-stroke;
+}
+.diagram-drawing .diagram-hover > [data-diagram-hit-area],
+.diagram-drawing .diagram-selected > [data-diagram-hit-area] {
+  fill: rgba(102, 126, 234, 0.08);
+  stroke: #667eea;
+  stroke-width: 1.5;
+  stroke-dasharray: 5 3;
+}
+.diagram-drawing .diagram-hover > [data-diagram-hit-area] {
+  fill: rgba(220, 38, 38, 0.08);
+  stroke: #dc2626;
+}
 
 /* Zoom controls for SVG */
 .svg-zoom-controls {
