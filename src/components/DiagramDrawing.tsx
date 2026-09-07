@@ -34,7 +34,9 @@ export const DiagramDrawing = memo(function DiagramDrawing({
       area.setAttribute('fill', 'transparent');
       area.setAttribute('stroke', 'none');
       area.setAttribute('data-diagram-hit-area', '');
-      area.setAttribute('pointer-events', 'none');
+      // The transparent rectangle is the interaction surface for the whole
+      // element, including empty space inside its visible SVG bounds.
+      area.setAttribute('pointer-events', 'all');
       group.insertBefore(area, group.firstChild);
       areas.push(area);
     });

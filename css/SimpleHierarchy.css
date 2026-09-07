@@ -306,7 +306,7 @@
 .diagram-drawing .diagram-selected { filter: drop-shadow(0 0 4px #667eea); }
 .diagram-drawing [data-diagram-hit-area] {
   fill: transparent;
-  pointer-events: none;
+  pointer-events: all;
   vector-effect: non-scaling-stroke;
 }
 .diagram-drawing .diagram-hover > [data-diagram-hit-area],
