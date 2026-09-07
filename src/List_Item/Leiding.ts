@@ -4,6 +4,11 @@ import { SVGelement } from "../SVGelement";
 
 export class Leiding extends Electro_Item {
 
+    // A cable change owns the following vertical branch elements.
+    getMaxNumChilds(): number {
+        return 256;
+    }
+
     convertLegacyKeys(mykeys: Array<[string,string,any]>) {
         // Niet van toepassing, element bestond nog niet toen we met legacy keys werkten
         // suppress warning on mykeys never used

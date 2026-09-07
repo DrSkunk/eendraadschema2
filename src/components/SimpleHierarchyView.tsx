@@ -462,6 +462,24 @@ const SimpleHierarchyView: React.FC = () => {
     if (!structure) return;
     
     const targetId = insertionTargetId || selectedElementId;
+
+    if (electroType === 'Leiding') {
+      const parent = targetId ? structure.getElectroItemById(targetId) : null;
+      if (!parent || parent.getType() !== 'Kring') {
+        window.alert('Een kabelwissel moet als kind van een Kring worden toegevoegd.');
+        return;
+      }
+      const newItem = structure.createItem(electroType);
+      structure.insertChildAfterId(newItem, targetId);
+      (globalThis as any).undostruct?.store();
+      setSelectedElementId(newItem.id);
+      refresh();
+      setShowAddModal(false);
+      setModalSearchTerm('');
+      setInsertionMode('add');
+      setInsertionTargetId(null);
+      return;
+    }
     
     if (insertionMode === 'insert-before' && targetId) {
       // Insert before the target element
@@ -562,7 +580,7 @@ const SimpleHierarchyView: React.FC = () => {
         return [];
       }
       const allowed = electroItem.allowedChilds();
-      return allowed.filter((type: string) => type !== "" && type !== "---");
+      return allowed.filter((type: string) => type !== "" && type !== "---" && (type !== 'Leiding' || electroItem.getType() === 'Kring'));
     } else if (insertionMode === 'insert-before' || insertionMode === 'insert-after') {
       // For insert-before/after, get allowed children of the parent
       if (!targetId) return [];
@@ -574,7 +592,7 @@ const SimpleHierarchyView: React.FC = () => {
         return ['Aansluiting', 'Zekering/differentieel', 'Kring'];
       }
       const allowed = parent.allowedChilds();
-      return allowed.filter((type: string) => type !== "" && type !== "---");
+      return allowed.filter((type: string) => type !== "" && type !== "---" && type !== 'Leiding');
     } else {
       // Default 'add' mode - get allowed children of selected element
       if (!selectedElementId) {
@@ -585,7 +603,7 @@ const SimpleHierarchyView: React.FC = () => {
         return [];
       }
       const allowed = electroItem.allowedChilds();
-      return allowed.filter((type: string) => type !== "" && type !== "---");
+      return allowed.filter((type: string) => type !== "" && type !== "---" && (type !== 'Leiding' || electroItem.getType() === 'Kring'));
     }
   }, [insertionMode, insertionTargetId, selectedElementId, structure]);
 
