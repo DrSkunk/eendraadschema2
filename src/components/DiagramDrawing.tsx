@@ -34,6 +34,7 @@ export const DiagramDrawing = memo(function DiagramDrawing({
       area.setAttribute('fill', 'transparent');
       area.setAttribute('stroke', 'none');
       area.setAttribute('data-diagram-hit-area', '');
+      area.setAttribute('pointer-events', 'none');
       group.insertBefore(area, group.firstChild);
       areas.push(area);
     });
