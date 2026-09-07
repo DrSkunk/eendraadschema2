@@ -151,9 +151,12 @@ client secret.
 VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 ```
 
-For GitHub Pages, create repository variable `GOOGLE_CLIENT_ID` under
-**Settings → Secrets and variables → Actions → Variables**. Deployment workflow
-passes this value to Vite as `VITE_GOOGLE_CLIENT_ID`.
+For GitHub Pages, add a repository **secret** named `VITE_GOOGLE_CLIENT_ID`
+under **Settings → Secrets and variables → Actions → Secrets**. The deployment
+workflow passes that secret to Vite during the build. The client ID is public in
+the built browser application; using a secret here only avoids putting it in
+repository configuration. The older repository variable `GOOGLE_CLIENT_ID` is
+also accepted as a fallback.
 
 Files remain in user's Drive. App requests access only to Drive files created
 or opened through app.

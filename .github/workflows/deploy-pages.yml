@@ -19,7 +19,10 @@ jobs:
     name: Build Pages artifact
     runs-on: ubuntu-latest
     env:
-      VITE_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+      # Vite only exposes variables prefixed with VITE_ at build time. Support
+      # the repository secret name documented for this project, while keeping
+      # the older repository-variable name as a fallback.
+      VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID || vars.GOOGLE_CLIENT_ID }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5.1.0
