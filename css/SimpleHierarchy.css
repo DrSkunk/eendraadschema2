@@ -310,13 +310,18 @@
   vector-effect: non-scaling-stroke;
 }
 .diagram-drawing .diagram-hover > [data-diagram-hit-area],
-.diagram-drawing .diagram-selected > [data-diagram-hit-area] {
+.diagram-drawing .diagram-selected > [data-diagram-hit-area],
+.diagram-drawing [data-element-id]:hover > [data-diagram-hit-area] {
   fill: rgba(102, 126, 234, 0.08);
   stroke: #667eea;
   stroke-width: 1.5;
   stroke-dasharray: 5 3;
 }
 .diagram-drawing .diagram-hover > [data-diagram-hit-area] {
+  fill: rgba(220, 38, 38, 0.08);
+  stroke: #dc2626;
+}
+.diagram-drawing [data-element-id]:hover > [data-diagram-hit-area] {
   fill: rgba(220, 38, 38, 0.08);
   stroke: #dc2626;
 }
