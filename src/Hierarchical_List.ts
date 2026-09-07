@@ -1259,7 +1259,10 @@ export class Hierarchical_List {
 
     // Nu gaan we doorheen alle items en passen we de nummers aan indien nodig
     let lastNumbers: { [kring: string]: number } = {}; // Object to keep track of last numbers for each type
-    let itemsZonderNr: Array<string> = ["", "Bord", "Kring", "Splitsing"];
+    // These elements can sit in a circuit branch but do not own a visible
+    // circuit number. They must not consume the next automatic number or
+    // replace the last real number used by the branch.
+    let itemsZonderNr: Array<string> = ["", "Bord", "Kring", "Splitsing", "Aftakdoos", "Leiding"];
 
     for (let i = 0; i < this.length; i++) {
       if (!this.active[i]) continue;
