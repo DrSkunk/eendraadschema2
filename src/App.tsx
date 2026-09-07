@@ -218,6 +218,23 @@ const App: React.FC = () => {
     console.log("React App initialized with all services");
   }, [session, appDocStorage, undostruct, fileAPIobj, simpleHierarchyView, setCurrentView, structure, reactInitialized]);
 
+  useEffect(() => {
+    const handleUndoRedo = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+      if (event.key.toLowerCase() === 'z' && !event.shiftKey) {
+        event.preventDefault();
+        globalThis.undoClicked?.();
+      } else if (event.key.toLowerCase() === 'y' || (event.key.toLowerCase() === 'z' && event.shiftKey)) {
+        event.preventDefault();
+        globalThis.redoClicked?.();
+      }
+    };
+    document.addEventListener('keydown', handleUndoRedo);
+    return () => document.removeEventListener('keydown', handleUndoRedo);
+  }, []);
+
   const handleRecoverAutosave = async () => {
     if (recoveryData && recoveryData.lastSavedStr && structure) {
       try {

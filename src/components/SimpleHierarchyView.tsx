@@ -1690,6 +1690,51 @@ const SimpleHierarchyView: React.FC = () => {
                   dangerouslySetInnerHTML={{ __html: getElementPropertiesHTML() }}
                 />
 
+                {(selectedElement.getType() === 'Kring' || selectedElement.getType() === 'Leiding') && (
+                  <div className="simple-cable-properties">
+                    <h3>Kabel</h3>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedElement.props.kabel_is_aanwezig ?? true)}
+                        onChange={(e) => handlePropertyChange('kabel_is_aanwezig', e.target.checked, 'checkbox')}
+                      />{' '}
+                      Kabel aanwezig
+                    </label>
+                    {selectedElement.props.kabel_is_aanwezig !== false && (
+                      <>
+                        <label htmlFor="react-cable-type">Type</label>
+                        <input
+                          id="react-cable-type"
+                          type="text"
+                          value={selectedElement.props.type_kabel || ''}
+                          onChange={(e) => handlePropertyChange('type_kabel', e.target.value, 'text')}
+                        />
+                        <label htmlFor="react-cable-location">Plaatsing</label>
+                        <select
+                          id="react-cable-location"
+                          value={selectedElement.props.kabel_locatie || 'N/A'}
+                          onChange={(e) => handlePropertyChange('kabel_locatie', e.target.value, 'select-one')}
+                        >
+                          {['N/A', 'Ondergronds', 'Luchtleiding', 'In wand', 'Op wand'].map(location => (
+                            <option key={location} value={location}>{location}</option>
+                          ))}
+                        </select>
+                        {selectedElement.props.kabel_locatie !== 'Luchtleiding' && (
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={Boolean(selectedElement.props.kabel_is_in_buis)}
+                              onChange={(e) => handlePropertyChange('kabel_is_in_buis', e.target.checked, 'checkbox')}
+                            />{' '}
+                            In buis
+                          </label>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
                 <div className="simple-properties-actions">
                   <button className="simple-action-btn" onClick={handleInsertBefore}>
                     ⬆️ Voeg toe voor

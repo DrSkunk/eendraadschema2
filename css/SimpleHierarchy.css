@@ -443,6 +443,32 @@
   font-size: 13px;
 }
 
+.simple-cable-properties {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.simple-cable-properties h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.simple-cable-properties input[type="text"],
+.simple-cable-properties select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--background);
+  color: var(--text-primary);
+}
+
 /* Create property rows with background - more compact */
 .simple-properties-form > * {
   display: flex;

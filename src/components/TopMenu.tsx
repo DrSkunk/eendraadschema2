@@ -99,6 +99,18 @@ export const TopMenu: React.FC<TopMenuProps> = ({ items, currentFilename }) => {
         ))}
       </ul>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <button
+          type="button"
+          title="Ongedaan maken (Ctrl/Cmd+Z)"
+          aria-label="Ongedaan maken"
+          onClick={() => globalThis.undoClicked?.()}
+        >↶</button>
+        <button
+          type="button"
+          title="Herhalen (Ctrl/Cmd+Y)"
+          aria-label="Herhalen"
+          onClick={() => globalThis.redoClicked?.()}
+        >↷</button>
         <div style={{
           padding: '4px 10px',
           backgroundColor: 'var(--surface)',
