@@ -222,15 +222,6 @@ The original application is available at [igoethal/eendraadschema](https://githu
 - Questions? Open an issue or start a discussion
 
 
-## Regression checks
+## Checks
 
-Run `npm ci`, then `npx playwright install chromium` once to install the test browser.
-Run `npm test` to build and test the production bundle. `npm run test:e2e` reuses
-the existing build and starts its own preview server on port 4173. Tests use
-isolated browser storage and do not touch your open browser or saved plans.
-
-The suite covers mouse controls in both drawing views, symbol selection after
-edits, undo/redo, repeated situation-plan navigation, and autosave recovery.
-Add a regression for interaction fixes; a successful build alone does not
-verify them. Inspect failures with `npx playwright show-report` and the traces
-in `test-results/`. CI runs these checks before deployment and release.
+Run `npm ci`, then `npm test` to build the production bundle.
