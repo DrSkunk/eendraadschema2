@@ -673,6 +673,13 @@ const SimpleHierarchyView: React.FC = () => {
     ],
   };
 
+  const elementTypeLabel = (type: string) => type === 'Leiding' ? 'Kabelwissel (Leiding)' : type;
+  const matchesElementTypeSearch = (type: string, search: string) => {
+    const query = search.toLowerCase();
+    return type.toLowerCase().includes(query)
+      || (type === 'Leiding' && ('kabel kabelwissel leiding').includes(query));
+  };
+
 
   const handleInsertBefore = () => {
     if (selectedElementId) {
@@ -1906,7 +1913,7 @@ const SimpleHierarchyView: React.FC = () => {
             category,
             types: types.filter(type => 
               allowedTypes.includes(type) && 
-              (!modalSearchTerm || type.toLowerCase().includes(modalSearchTerm.toLowerCase()))
+              (!modalSearchTerm || matchesElementTypeSearch(type, modalSearchTerm))
             )
           }))
           .filter(({ types }) => types.length > 0);
@@ -1991,7 +1998,7 @@ const SimpleHierarchyView: React.FC = () => {
                             <div className="add-element-card-preview">
                               {getElementPreviewSVG(type)}
                             </div>
-                            <div className="add-element-card-name">{type}</div>
+                            <div className="add-element-card-name">{elementTypeLabel(type)}</div>
                           </div>
                         ))}
                       </div>
@@ -2012,7 +2019,7 @@ const SimpleHierarchyView: React.FC = () => {
             category,
             types: types.filter(type => 
               allowedTypes.includes(type) && 
-              (!modalSearchTerm || type.toLowerCase().includes(modalSearchTerm.toLowerCase()))
+              (!modalSearchTerm || matchesElementTypeSearch(type, modalSearchTerm))
             )
           }))
           .filter(({ types }) => types.length > 0);
@@ -2084,7 +2091,7 @@ const SimpleHierarchyView: React.FC = () => {
                             <div className="add-element-card-preview">
                               {getElementPreviewSVG(type)}
                             </div>
-                            <div className="add-element-card-name">{type}</div>
+                            <div className="add-element-card-name">{elementTypeLabel(type)}</div>
                           </div>
                         ))}
                       </div>
