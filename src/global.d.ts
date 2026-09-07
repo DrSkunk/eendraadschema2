@@ -18,6 +18,7 @@ declare global {
     appDocStorage: MultiLevelStorage<any>;
     undostruct: any;
     structure: Hierarchical_List;
+    replaceStructure?: (structure: Hierarchical_List) => void;
     autoSaver: AutoSaver;
     CONFIGPAGE_LEFT: string;
     CONFIGPAGE_RIGHT: string;

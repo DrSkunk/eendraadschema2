@@ -562,7 +562,9 @@ function json_to_structure(
 }
 
 export function loadFromText(text: string, version: number, redraw = true) {
-  globalThis.structure = json_to_structure(text, globalThis.structure, version);
+  const nextStructure = json_to_structure(text, globalThis.structure, version);
+  if (globalThis.replaceStructure) globalThis.replaceStructure(nextStructure);
+  else globalThis.structure = nextStructure;
   // View switching is now handled by React - no need to call topMenu
   if (redraw == true) {
     // Trigger a redraw if needed
