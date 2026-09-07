@@ -21,6 +21,17 @@ const SimpleHierarchyView: React.FC = () => {
   const svgZoomRef = useRef(svgZoom);
   const svgPanXRef = useRef(svgPanX);
   const svgPanYRef = useRef(svgPanY);
+  const wheelGestureRef = useRef<{
+    container: HTMLElement;
+    x: number;
+    y: number;
+    startedAt: number;
+    delta: number;
+    zoom: number;
+    panX: number;
+    panY: number;
+  } | null>(null);
+  const wheelFrameRef = useRef<number | null>(null);
   useEffect(() => {
     svgZoomRef.current = svgZoom;
     svgPanXRef.current = svgPanX;
@@ -1181,24 +1192,52 @@ const SimpleHierarchyView: React.FC = () => {
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
       const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? container.clientHeight : 1);
-      const currentZoom = svgZoomRef.current;
-      const currentPanX = svgPanXRef.current;
-      const currentPanY = svgPanYRef.current;
-      const zoom = Math.max(0.1, Math.min(8, currentZoom * Math.exp(-delta * 0.002)));
-      const ratio = zoom / currentZoom;
-      const panX = x - (x - currentPanX) * ratio;
-      const panY = y - (y - currentPanY) * ratio;
-      // Keep the latest transform available to this stable listener. Trackpad
-      // wheel events can arrive before React commits the preceding update.
+      const now = performance.now();
+      let gesture = wheelGestureRef.current;
+      if (!gesture || gesture.container !== container || now - gesture.startedAt > 140) {
+        gesture = {
+          container,
+          x,
+          y,
+          startedAt: now,
+          delta: 0,
+          zoom: svgZoomRef.current,
+          panX: svgPanXRef.current,
+          panY: svgPanYRef.current,
+        };
+        wheelGestureRef.current = gesture;
+      }
+      gesture.startedAt = now;
+      gesture.delta += delta;
+
+      const zoom = Math.max(0.1, Math.min(8, gesture.zoom * Math.exp(-gesture.delta * 0.002)));
+      const ratio = zoom / gesture.zoom;
+      const panX = gesture.x - (gesture.x - gesture.panX) * ratio;
+      const panY = gesture.y - (gesture.y - gesture.panY) * ratio;
       svgZoomRef.current = zoom;
       svgPanXRef.current = panX;
       svgPanYRef.current = panY;
-      setSvgPanX(panX);
-      setSvgPanY(panY);
-      setSvgZoom(zoom);
+
+      // Trackpads emit a burst of wheel events. Commit one transform per
+      // animation frame so intermediate deltas never cause visible shaking.
+      if (wheelFrameRef.current === null) {
+        wheelFrameRef.current = window.requestAnimationFrame(() => {
+          wheelFrameRef.current = null;
+          setSvgPanX(svgPanXRef.current);
+          setSvgPanY(svgPanYRef.current);
+          setSvgZoom(svgZoomRef.current);
+        });
+      }
     };
     containers.forEach(container => container.addEventListener('wheel', handleWheel, { passive: false }));
-    return () => containers.forEach(container => container.removeEventListener('wheel', handleWheel));
+    return () => {
+      containers.forEach(container => container.removeEventListener('wheel', handleWheel));
+      if (wheelFrameRef.current !== null) {
+        window.cancelAnimationFrame(wheelFrameRef.current);
+        wheelFrameRef.current = null;
+      }
+      wheelGestureRef.current = null;
+    };
   }, [isFullscreen]);
 
   // Get SVG content
