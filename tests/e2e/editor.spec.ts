@@ -39,6 +39,52 @@ test('mouse drag and wheel zoom work in normal and fullscreen views', async ({ p
   await expect(page.locator('#EDS-fullscreen')).toHaveCount(0);
 });
 
+test('registers WebMCP tools for reading and editing the schema', async ({ page }) => {
+  await page.addInitScript(() => {
+    const registeredTools = new Map<string, any>();
+    (window as any).__webmcpTools = registeredTools;
+    Object.defineProperty(document, 'modelContext', {
+      configurable: true,
+      value: {
+        registerTool(tool: any) {
+          registeredTools.set(tool.name, tool);
+        },
+      },
+    });
+  });
+  await openExample(page);
+
+  await expect.poll(() => page.evaluate(() =>
+    Array.from((window as any).__webmcpTools.keys()).sort()
+  )).toEqual([
+    'schema.add_element',
+    'schema.delete_element',
+    'schema.get',
+    'schema.get_element',
+    'schema.update_element',
+  ]);
+
+  const contact = page.locator('.simple-hierarchy-item').filter({ hasText: 'Contactdoos' }).first();
+  const id = Number(await contact.getAttribute('data-id'));
+  const result = await page.evaluate(async ({ id }) => {
+    const tool = (window as any).__webmcpTools.get('schema.update_element');
+    return tool.execute({ id, properties: { adres: 'WebMCP room' } });
+  }, { id });
+  expect(result.success).toBe(true);
+  await expect(page.locator('#EDS')).toContainText('WebMCP room');
+
+  const confirmationError = await page.evaluate(async ({ id }) => {
+    const tool = (window as any).__webmcpTools.get('schema.delete_element');
+    try {
+      await tool.execute({ id, confirm: false });
+      return null;
+    } catch (error) {
+      return (error as Error).message;
+    }
+  }, { id });
+  expect(confirmationError).toContain('confirm=true');
+});
+
 test('selection survives property edits, undo/redo, zoom and fullscreen', async ({ page }) => {
   await openExample(page);
   const row = page.locator('.simple-hierarchy-item').filter({ hasText: 'Contactdoos' }).first();

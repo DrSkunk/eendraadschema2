@@ -5,6 +5,7 @@ import { undoRedo } from './undoRedo';
 import { importExportUsingFileAPI } from './importExport/importExport';
 import { SimpleHierarchyView } from './SimpleHierarchyView';
 import { Hierarchical_List } from './Hierarchical_List';
+import { installWebMCPTools } from './webmcp';
 
 export type AppView = 'start' | 'file' | 'editor' | 'sitplan' | 'print' | 'documentation' | 'contact' | 'library';
 
@@ -35,6 +36,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   React.useEffect(() => {
     (window as any).simpleHierarchyView = simpleHierarchyView;
   }, [simpleHierarchyView]);
+
+  React.useEffect(() => installWebMCPTools(), []);
 
   // Legacy code replaces the document object in a few import/reset paths.
   // Subscribe to those replacements once instead of polling every 100ms.
