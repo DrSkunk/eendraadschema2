@@ -1,7 +1,10 @@
 import { serializeCurrentStructure } from '../importExport/importExport';
 import { dialogPrompt } from '../utils/DialogHelpers';
 import { GoogleDriveFile, googleDriveService } from './GoogleDriveService';
-import { setSaveDestination } from './SaveDestination';
+import {
+  notifyDocumentStorageStateChanged,
+  setSaveDestination,
+} from './SaveDestination';
 
 function filenameWithExtension(
   filename: string,
@@ -16,14 +19,7 @@ function filenameWithExtension(
 }
 
 export function canOverwriteCurrentGoogleDriveFile(): boolean {
-  const driveFile = googleDriveService.getCurrentFile();
-  const currentFilename = String(
-    globalThis.structure?.properties?.filename || ''
-  );
-  return Boolean(
-    driveFile &&
-      driveFile.name.toLowerCase() === currentFilename.toLowerCase()
-  );
+  return googleDriveService.getCurrentFile() !== null;
 }
 
 /** Saves current schema to Drive. Returns null when filename prompt is cancelled. */
@@ -38,7 +34,12 @@ export async function saveCurrentStructureToGoogleDrive(
   }
 
   const serialized = serializeCurrentStructure(format);
-  const createNewFile = saveAs || !canOverwriteCurrentGoogleDriveFile();
+  const driveFile = googleDriveService.getCurrentFile();
+  const expectedExtension = format === 'json' ? '.json' : '.eds';
+  const createNewFile =
+    saveAs ||
+    !driveFile ||
+    !driveFile.name.toLowerCase().endsWith(expectedExtension);
   let filename = serialized.filename;
 
   if (createNewFile) {
@@ -59,9 +60,9 @@ export async function saveCurrentStructureToGoogleDrive(
   );
 
   globalThis.structure.properties.filename = savedFile.name;
-  globalThis.fileAPIobj?.clear();
   globalThis.autoSaver?.saveManually(`TXT0040000${serialized.rawJson}`);
   globalThis.propUpload?.(serialized.content);
   setSaveDestination('google-drive');
+  notifyDocumentStorageStateChanged();
   return savedFile;
 }

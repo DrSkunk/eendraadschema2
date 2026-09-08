@@ -95,21 +95,32 @@ class GoogleDriveService {
   private accessToken: string | null = null;
   private tokenExpiresAt = 0;
   private currentFile: GoogleDriveFile | null = null;
+  private boundStructure: object | null = null;
 
   isConfigured(): boolean {
     return Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim());
   }
 
   getCurrentFile(): GoogleDriveFile | null {
-    return this.currentFile;
+    return this.boundStructure === globalThis.structure
+      ? this.currentFile
+      : null;
   }
 
   setCurrentFile(file: GoogleDriveFile): void {
     this.currentFile = file;
+    this.boundStructure = globalThis.structure;
   }
 
   clearCurrentFile(): void {
     this.currentFile = null;
+    this.boundStructure = null;
+  }
+
+  rebindToCurrentStructure(): void {
+    if (this.currentFile) {
+      this.boundStructure = globalThis.structure;
+    }
   }
 
   private async requestAccessToken(forceConsent = false): Promise<string> {
@@ -264,6 +275,7 @@ class GoogleDriveService {
     if (!response.ok) throw driveError(response.status, payload);
 
     this.currentFile = payload as GoogleDriveFile;
+    this.boundStructure = globalThis.structure;
     return this.currentFile;
   }
 
@@ -274,6 +286,7 @@ class GoogleDriveService {
     this.accessToken = null;
     this.tokenExpiresAt = 0;
     this.currentFile = null;
+    this.boundStructure = null;
   }
 }
 

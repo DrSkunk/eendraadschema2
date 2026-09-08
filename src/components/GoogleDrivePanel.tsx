@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../AppContext';
 import { EDStoStructure } from '../importExport/importExport';
 import {
@@ -10,10 +10,17 @@ import {
   canOverwriteCurrentGoogleDriveFile,
   saveCurrentStructureToGoogleDrive,
 } from '../storage/GoogleDriveActions';
-import { setSaveDestination } from '../storage/SaveDestination';
+import {
+  notifyDocumentStorageStateChanged,
+  onDocumentStorageStateChange,
+  setSaveDestination,
+} from '../storage/SaveDestination';
 
 interface GoogleDrivePanelProps {
   format: 'eds' | 'json';
+  active?: boolean;
+  openPickerOnMount?: boolean;
+  onPickerOpened?: () => void;
 }
 
 function formatModifiedTime(value?: string): string {
@@ -31,12 +38,18 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export const GoogleDrivePanel: React.FC<GoogleDrivePanelProps> = ({ format }) => {
+export const GoogleDrivePanel: React.FC<GoogleDrivePanelProps> = ({
+  format,
+  active = false,
+  openPickerOnMount = false,
+  onPickerOpened,
+}) => {
   const { fileAPIobj, setCurrentView } = useApp();
   const [files, setFiles] = useState<GoogleDriveFile[]>([]);
   const [showFilePicker, setShowFilePicker] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
+  const [, setDocumentStateVersion] = useState(0);
 
   const configured = googleDriveService.isConfigured();
   const currentDriveFile = googleDriveService.getCurrentFile();
@@ -65,6 +78,23 @@ export const GoogleDrivePanel: React.FC<GoogleDrivePanelProps> = ({ format }) =>
       setShowFilePicker(true);
     });
 
+  useEffect(() => {
+    if (!openPickerOnMount) {
+      return;
+    }
+    onPickerOpened?.();
+    if (!configured) return;
+    handleChooseFile();
+  }, [configured, openPickerOnMount]);
+
+  useEffect(
+    () =>
+      onDocumentStorageStateChange(() => {
+        setDocumentStateVersion((version) => version + 1);
+      }),
+    []
+  );
+
   const handleOpen = (file: GoogleDriveFile) =>
     run(async () => {
       const content = await googleDriveService.downloadFile(file);
@@ -73,6 +103,7 @@ export const GoogleDrivePanel: React.FC<GoogleDrivePanelProps> = ({ format }) =>
       globalThis.structure.properties.filename = file.name;
       fileAPIobj.clear();
       setSaveDestination('google-drive');
+      notifyDocumentStorageStateChanged();
       setShowFilePicker(false);
       setStatus(`${file.name} geopend vanuit Google Drive.`);
       setCurrentView('editor');
@@ -115,7 +146,7 @@ export const GoogleDrivePanel: React.FC<GoogleDrivePanelProps> = ({ format }) =>
             marginBottom: '8px',
           }}
         >
-          Google Drive
+          Google Drive {active ? '· actief' : ''}
         </h2>
         <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: 1.6 }}>
           Open en bewaar EDS- of JSON-bestanden in uw Google Drive. Toegang is beperkt

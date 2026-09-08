@@ -1,513 +1,402 @@
-import React, { useState, useEffect } from 'react';
-import { useApp } from '../AppContext';
-import { GoogleDrivePanel } from './GoogleDrivePanel';
-import { googleDriveService } from '../storage/GoogleDriveService';
+import React, { useEffect, useState } from "react";
+import { useApp } from "../AppContext";
+import { GoogleDrivePanel } from "./GoogleDrivePanel";
 import {
   getSaveDestination,
+  notifyDocumentStorageStateChanged,
+  onDocumentStorageStateChange,
   onSaveDestinationChange,
-  setSaveDestination,
   SaveDestination,
-} from '../storage/SaveDestination';
+  setSaveDestination,
+  storageBackends,
+} from "../storage/SaveDestination";
+import {
+  downloadCopy,
+  openFromLocalFile,
+  saveToBackend,
+  StorageFormat,
+} from "../storage/StorageActions";
+import { dialogAlert, dialogPrompt } from "../utils/DialogHelpers";
 
-const FilePage: React.FC = () => {
-  const { structure, fileAPIobj } = useApp();
-  const [disableCompression, setDisableCompression] = useState(false);
-  const [saveFormat, setSaveFormat] = useState<'eds' | 'json'>('eds');
-  const [saveDestination, setSaveDestinationState] = useState<SaveDestination>(
+const cardStyle: React.CSSProperties = {
+  background: "var(--surface)",
+  borderRadius: "12px",
+  padding: "24px",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+  marginBottom: "24px",
+};
+
+const primaryButton: React.CSSProperties = {
+  background:
+    "linear-gradient(135deg, var(--primary-color), var(--accent-color))",
+  color: "white",
+  border: "none",
+  padding: "10px 20px",
+  borderRadius: "8px",
+  fontSize: "14px",
+  fontWeight: 500,
+  cursor: "pointer",
+};
+
+const secondaryButton: React.CSSProperties = {
+  background: "var(--surface)",
+  color: "var(--primary-color)",
+  border: "1px solid var(--primary-color)",
+  padding: "10px 20px",
+  borderRadius: "8px",
+  fontSize: "14px",
+  fontWeight: 500,
+  cursor: "pointer",
+};
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+interface FilePageProps {
+  openDrivePickerOnMount?: boolean;
+  onDrivePickerOpened?: () => void;
+}
+
+const FilePage: React.FC<FilePageProps> = ({
+  openDrivePickerOnMount = false,
+  onDrivePickerOpened,
+}) => {
+  const { structure, fileAPIobj, setCurrentView } = useApp();
+  const [backend, setBackend] = useState<SaveDestination>(
     getSaveDestination
   );
+  const [format, setFormat] = useState<StorageFormat>("eds");
+  const [disableCompression, setDisableCompression] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [, setDocumentStateVersion] = useState(0);
 
-  useEffect(() => {
-    // Initialize checkbox state from structure properties
-    if (
-      structure &&
-      structure.properties &&
-      typeof structure.properties.disableEDSCompression !== 'undefined'
-    ) {
-      setDisableCompression(!!structure.properties.disableEDSCompression);
-    }
-
-    // Suggest the save format based on the currently open filename
-    if (structure && structure.properties && structure.properties.filename) {
-      const lower = structure.properties.filename.toLowerCase();
-      if (lower.endsWith('.json')) {
-        setSaveFormat('json');
-      } else {
-        setSaveFormat('eds');
-      }
-    }
-  }, [structure]);
+  useEffect(() => onSaveDestinationChange(setBackend), []);
 
   useEffect(
-    () => onSaveDestinationChange(setSaveDestinationState),
+    () =>
+      onDocumentStorageStateChange(() => {
+        const filename = globalThis.structure?.properties?.filename || "";
+        setFormat(filename.toLowerCase().endsWith(".json") ? "json" : "eds");
+        setDocumentStateVersion((version) => version + 1);
+      }),
     []
   );
 
-  const handleCompressionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const checked = e.target.checked;
+  useEffect(() => {
+    const filename = structure?.properties?.filename || "";
+    setFormat(filename.toLowerCase().endsWith(".json") ? "json" : "eds");
+    setDisableCompression(
+      structure?.properties?.disableEDSCompression === true
+    );
+  }, [structure]);
+
+  const run = async (operation: () => Promise<void>) => {
+    setBusy(true);
+    try {
+      await operation();
+    } catch (error) {
+      if ((error as DOMException)?.name !== "AbortError") {
+        console.error("Bestandsbewerking is mislukt:", error);
+        await dialogAlert("Bestandsbewerking mislukt", errorMessage(error));
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const selectBackend = (nextBackend: SaveDestination) => {
+    const definition = storageBackends.find(
+      (candidate) => candidate.id === nextBackend
+    );
+    if (!definition?.available()) return;
+    setSaveDestination(nextBackend);
+  };
+
+  const handleOpenLocal = () =>
+    run(async () => {
+      await openFromLocalFile();
+      setCurrentView("editor");
+    });
+
+  const handleSaveLocal = (saveAs: boolean) =>
+    run(async () => {
+      await saveToBackend("local-file", format, saveAs);
+    });
+
+  const handleCompressionChange = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const checked = event.target.checked;
     setDisableCompression(checked);
-    
-    if (structure.properties) {
+    if (structure?.properties) {
       structure.properties.disableEDSCompression = checked;
     }
   };
 
-  const handleSave = async (saveAs: boolean) => {
-    // Call the global exportjson function that's already implemented
-    if (typeof globalThis.exportjson === 'function') {
-      globalThis.exportjson(saveAs, saveFormat);
-    }
-  };
-
-  const handleLoad = async () => {
-    setSaveDestination('disk');
-    googleDriveService.clearCurrentFile();
-    // Call the global loadClicked function
-    if (typeof globalThis.loadClicked === 'function') {
-      await globalThis.loadClicked();
-    }
-  };
-
-  const handleMerge = async () => {
-    // Call the global importToAppendClicked function
-    if (typeof globalThis.importToAppendClicked === 'function') {
-      await globalThis.importToAppendClicked();
-    }
-  };
-
-  const handleNameChange = () => {
-    // Call the global HL_enterSettings function for legacy mode
-    if (typeof globalThis.HL_enterSettings === 'function') {
-      globalThis.HL_enterSettings();
-    }
-  };
-
-  const supportsFileAPI = !!(window as any).showOpenFilePicker;
-
-  // Render save section based on file API support
-  const renderSaveSection = () => {
-    if (supportsFileAPI) {
-      // Use fileAPI
-      if (fileAPIobj.filename != null) {
-        return (
-          <>
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-              <button
-                onClick={() => handleSave(false)}
-                style={{
-                  background: 'linear-gradient(135deg, var(--primary-color), var(--accent-color))',
-                  color: 'white',
-                  border: 'none',
-                  padding: '10px 24px',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-              >
-                💾 Opslaan
-              </button>
-              <button
-                onClick={() => handleSave(true)}
-                style={{
-                  background: 'white',
-                  color: 'var(--primary-color)',
-                  border: '2px solid var(--primary-color)',
-                  padding: '10px 24px',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-              >
-                📁 Opslaan als
-              </button>
-            </div>
-            <div
-              style={{
-                background: '#f0f9ff',
-                borderLeft: '4px solid var(--secondary-color)',
-                padding: '12px 16px',
-                borderRadius: '6px',
-                marginBottom: '16px',
-              }}
-            >
-              <div style={{ color: 'var(--text-primary)', fontSize: '14px', lineHeight: '1.6' }}>
-                Laatst geopend of opgeslagen om <strong>{fileAPIobj.lastsaved}</strong> met naam{' '}
-                <strong>{fileAPIobj.filename}</strong>
-                <br />
-                <br />
-                Klik op "Opslaan" om bij te werken
-              </div>
-            </div>
-          </>
-        );
-      } else {
-        return (
-          <>
-            <button
-              onClick={() => handleSave(true)}
-              style={{
-                background: 'linear-gradient(135deg, var(--primary-color), var(--accent-color))',
-                color: 'white',
-                border: 'none',
-                padding: '10px 24px',
-                borderRadius: '8px',
-                fontSize: '14px',
-                fontWeight: '500',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                marginBottom: '20px',
-              }}
-            >
-              💾 Opslaan als
-            </button>
-            <div
-              style={{
-                background: '#fef3c7',
-                borderLeft: '4px solid #f59e0b',
-                padding: '12px 16px',
-                borderRadius: '6px',
-                marginBottom: '16px',
-              }}
-            >
-              <strong style={{ color: '#92400e' }}>⚠️ Opgelet:</strong>
-              <span style={{ color: '#92400e' }}>
-                {' '}
-                Uw werk werd nog niet opgeslagen tijdens deze sessie. Klik op "Opslaan als".
-              </span>
-            </div>
-          </>
-        );
-      }
-    } else {
-      // Legacy mode
-      return (
-        <>
-          <div style={{ marginBottom: '20px' }}>
-            <div style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-              Bestandsnaam:{' '}
-              <code
-                style={{
-                  background: '#f3f4f6',
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  fontSize: '13px',
-                }}
-              >
-                {structure.properties?.filename || 'eendraadschema.eds'}
-              </code>
-            </div>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button
-                onClick={() => handleSave(false)}
-                style={{
-                  background: 'linear-gradient(135deg, var(--primary-color), var(--accent-color))',
-                  color: 'white',
-                  border: 'none',
-                  padding: '10px 24px',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-              >
-                💾 Opslaan
-              </button>
-              <button
-                onClick={handleNameChange}
-                style={{
-                  background: 'white',
-                  color: 'var(--primary-color)',
-                  border: '2px solid var(--primary-color)',
-                  padding: '10px 24px',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-              >
-                ✏️ Naam wijzigen
-              </button>
-            </div>
-          </div>
-          <div
-            style={{
-              color: 'var(--text-secondary)',
-              fontSize: '14px',
-              lineHeight: '1.6',
-              marginBottom: '16px',
-            }}
-          >
-            U kan het schema opslaan op uw lokale harde schijf voor later gebruik. De standaard-naam
-            is eendraadschema.eds. U kan deze wijzigen door op "wijzigen" te klikken. Klik
-            vervolgens op "opslaan" en volg de instructies van uw browser. In de meeste gevallen zal
-            uw browser het bestand automatisch plaatsen in de Downloads-folder tenzij u uw browser
-            instelde dat die eerst een locatie moet vragen.
-            <br />
-            <br />
-            Eens opgeslagen kan het schema later opnieuw geladen worden door in het menu "openen" te
-            kiezen en vervolgens het bestand op uw harde schijf te selecteren.
-          </div>
-        </>
+  const handleRename = () =>
+    run(async () => {
+      const currentName =
+        structure?.properties?.filename ||
+        (format === "json" ? "eendraadschema.json" : "eendraadschema.eds");
+      const nextName = await dialogPrompt(
+        "Documentnaam wijzigen",
+        "Geef een nieuwe documentnaam op.",
+        currentName
       );
-    }
-  };
+      if (nextName == null) return;
+      const trimmedName = nextName.trim();
+      if (!trimmedName) {
+        throw new Error("De documentnaam mag niet leeg zijn.");
+      }
+      structure.properties.filename = trimmedName;
+      notifyDocumentStorageStateChanged();
+    });
 
   return (
     <>
-      <span id="exportscreen"></span>
       <div className="modern-settings-container">
         <div className="modern-settings-header">
-          <h1>📂 Bestand</h1>
+          <h1>Bestanden en opslag</h1>
+          <p>
+            Kies waar u verder werkt. Een kopie downloaden verandert de gekozen
+            opslaglocatie niet.
+          </p>
         </div>
 
-        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-          {/* Opslaglocatie kiezen */}
-          <div
-            style={{
-              background: 'white',
-              borderRadius: '12px',
-              padding: '24px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-              marginBottom: '24px',
-            }}
-          >
-            <h2 style={{ color: 'var(--primary-color)', fontSize: '20px', fontWeight: 600, margin: '0 0 8px' }}>
-              Waar wilt u opslaan?
+        <div style={{ maxWidth: "900px", margin: "0 auto" }}>
+          <section style={cardStyle}>
+            <h2 style={{ marginTop: 0, color: "var(--primary-color)" }}>
+              Actieve opslaglocatie
             </h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', margin: '0 0 16px', lineHeight: 1.5 }}>
-              Kies apparaat of Google Drive. U kunt op elk moment wisselen.
+            <p style={{ color: "var(--text-secondary)", lineHeight: 1.5 }}>
+              <strong>Opslaan</strong> werkt het bestand bij op de gekozen
+              locatie. U kunt op elk moment naar een andere backend wisselen.
             </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-              {([
-                { id: 'disk' as SaveDestination, icon: '💻', title: 'Dit apparaat', text: 'Open en bewaar bestanden op uw computer.' },
-                { id: 'google-drive' as SaveDestination, icon: '☁️', title: 'Google Drive', text: 'Open en bewaar bestanden in uw Drive.' },
-              ]).map((option) => {
-                const selected = saveDestination === option.id;
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns:
+                  "repeat(auto-fit, minmax(240px, 1fr))",
+                gap: "12px",
+              }}
+            >
+              {storageBackends.map((option) => {
+                const selected = backend === option.id;
+                const available = option.available();
                 return (
                   <button
                     type="button"
                     key={option.id}
+                    disabled={!available}
                     aria-pressed={selected}
-                    onClick={() => setSaveDestination(option.id)}
+                    onClick={() => selectBackend(option.id)}
+                    title={
+                      available ? option.description : option.unavailableReason
+                    }
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '14px',
-                      padding: '16px',
-                      borderRadius: '10px',
-                      border: selected ? '2px solid var(--primary-color)' : '1px solid #d1d5db',
-                      background: selected ? '#eff6ff' : 'white',
-                      cursor: 'pointer',
-                      textAlign: 'left',
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "14px",
+                      padding: "16px",
+                      borderRadius: "10px",
+                      border: selected
+                        ? "2px solid var(--primary-color)"
+                        : "1px solid var(--border)",
+                      background: selected
+                        ? "color-mix(in srgb, var(--primary-color) 10%, var(--surface))"
+                        : "var(--surface)",
+                      cursor: available ? "pointer" : "not-allowed",
+                      opacity: available ? 1 : 0.55,
+                      textAlign: "left",
                     }}
                   >
-                    <span style={{ fontSize: '28px' }}>{option.icon}</span>
+                    <span style={{ fontSize: "28px" }}>{option.icon}</span>
                     <span>
-                      <strong style={{ display: 'block', color: 'var(--text-primary)', fontSize: '15px' }}>{option.title}</strong>
-                      <span style={{ display: 'block', color: 'var(--text-secondary)', fontSize: '12px', marginTop: '3px' }}>{option.text}</span>
+                      <strong
+                        style={{
+                          display: "block",
+                          color: "var(--text-primary)",
+                        }}
+                      >
+                        {option.label}
+                      </strong>
+                      <span
+                        style={{
+                          display: "block",
+                          color: "var(--text-secondary)",
+                          fontSize: "12px",
+                          marginTop: "4px",
+                        }}
+                      >
+                        {available
+                          ? option.description
+                          : option.unavailableReason}
+                      </span>
                     </span>
-                    <span aria-hidden="true" style={{ marginLeft: 'auto', color: selected ? 'var(--primary-color)' : '#9ca3af', fontSize: '20px' }}>
-                      {selected ? '●' : '○'}
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        marginLeft: "auto",
+                        color: selected
+                          ? "var(--primary-color)"
+                          : "var(--text-secondary)",
+                      }}
+                    >
+                      {selected ? "●" : "○"}
                     </span>
                   </button>
                 );
               })}
             </div>
+          </section>
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '18px', marginTop: '18px', paddingTop: '16px', borderTop: '1px solid #e5e7eb' }}>
-              <label style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-                Bestandsformaat:{' '}
+          <section style={cardStyle}>
+            <h2 style={{ marginTop: 0, color: "var(--primary-color)" }}>
+              Bestandsformaat
+            </h2>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: "18px",
+              }}
+            >
+              <label style={{ color: "var(--text-primary)" }}>
+                Formaat voor acties hieronder{" "}
                 <select
-                  value={saveFormat}
-                  onChange={(event) => setSaveFormat(event.target.value as 'eds' | 'json')}
-                  style={{ marginLeft: '6px', padding: '7px 10px', borderRadius: '6px', border: '1px solid #d1d5db', background: 'white' }}
+                  value={format}
+                  onChange={(event) =>
+                    setFormat(event.target.value as StorageFormat)
+                  }
+                  style={{
+                    marginLeft: "8px",
+                    padding: "7px 10px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--border)",
+                    background: "var(--surface)",
+                    color: "var(--text-primary)",
+                  }}
                 >
                   <option value="eds">EDS (.eds)</option>
                   <option value="json">JSON (.json)</option>
                 </select>
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '7px', color: 'var(--text-secondary)', fontSize: '13px', cursor: 'pointer' }}>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "7px",
+                  color: "var(--text-secondary)",
+                }}
+              >
                 <input
                   type="checkbox"
                   checked={disableCompression}
                   onChange={handleCompressionChange}
-                  disabled={saveFormat === 'json'}
+                  disabled={format === "json"}
                 />
                 EDS zonder compressie
               </label>
-            </div>
-            {saveFormat === 'json' && (
-              <p style={{ color: '#92400e', background: '#fef3c7', padding: '9px 12px', borderRadius: '6px', fontSize: '12px', margin: '12px 0 0' }}>
-                JSON wordt niet ondersteund door oudere app-versies.
-              </p>
-            )}
-          </div>
-
-          {saveDestination === 'disk' && (
-            <>
-          {/* Openen Section */}
-          <div
-            style={{
-              background: 'white',
-              borderRadius: '12px',
-              padding: '24px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-              marginBottom: '24px',
-            }}
-          >
-            <h2
-              style={{
-                color: 'var(--primary-color)',
-                fontSize: '20px',
-                fontWeight: '600',
-                marginBottom: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-              }}
-            >
-              📥 Openen uit bestand
-            </h2>
-            <div style={{ display: 'flex', gap: '20px', alignItems: 'start' }}>
               <button
-                onClick={handleLoad}
-                style={{
-                  background: 'linear-gradient(135deg, var(--primary-color), var(--accent-color))',
-                  color: 'white',
-                  border: 'none',
-                  padding: '12px 28px',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  whiteSpace: 'nowrap',
-                }}
+                type="button"
+                disabled={busy}
+                onClick={handleRename}
+                style={secondaryButton}
               >
-                📂 Openen
+                Documentnaam wijzigen…
               </button>
-              <p
-                style={{
-                  color: 'var(--text-secondary)',
-                  fontSize: '14px',
-                  lineHeight: '1.6',
-                  margin: 0,
-                }}
-              >
-                Click op "openen" en selecteer een eerder opgeslagen EDS of JSON bestand.
-              </p>
             </div>
-          </div>
+          </section>
 
-          {/* Opslaan Section */}
-          <div
-            style={{
-              background: 'white',
-              borderRadius: '12px',
-              padding: '24px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-              marginBottom: '24px',
-            }}
-          >
-            <h2
-              style={{
-                color: 'var(--primary-color)',
-                fontSize: '20px',
-                fontWeight: '600',
-                marginBottom: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-              }}
-            >
-              💾 Opslaan
-            </h2>
-            {renderSaveSection()}
-          </div>
-            </>
-          )}
-
-          {/* Google Drive Section */}
-          {saveDestination === 'google-drive' && (
-            <GoogleDrivePanel format={saveFormat} />
-          )}
-
-          {/* Samenvoegen Section */}
-          <div
-            style={{
-              background: 'white',
-              borderRadius: '12px',
-              padding: '24px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-            }}
-          >
-            <h2
-              style={{
-                color: 'var(--primary-color)',
-                fontSize: '20px',
-                fontWeight: '600',
-                marginBottom: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-              }}
-            >
-              🔀 Samenvoegen
-            </h2>
-            <div style={{ display: 'flex', gap: '20px', alignItems: 'start' }}>
-              <button
-                onClick={handleMerge}
-                style={{
-                  background: 'linear-gradient(135deg, var(--accent-color), var(--primary-color))',
-                  color: 'white',
-                  border: 'none',
-                  padding: '12px 28px',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                🔀 Samenvoegen
-              </button>
-              <div style={{ flex: 1 }}>
-                <p
-                  style={{
-                    color: 'var(--text-secondary)',
-                    fontSize: '14px',
-                    lineHeight: '1.6',
-                    margin: '0 0 12px 0',
-                  }}
+          <section style={cardStyle}>
+              <h2 style={{ marginTop: 0, color: "var(--primary-color)" }}>
+                Computer {backend === "local-file" ? "· actief" : ""}
+              </h2>
+              <p style={{ color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                Open een bestaand bestand of bewaar het huidige schema als uw
+                actieve lokale werkbestand.
+              </p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={handleOpenLocal}
+                  style={secondaryButton}
                 >
-                  Open een tweede EDS bestand en voeg de inhoud toe aan het huidige EDS bestand.
-                  Voegt de ééndraadschema's samen en voegt eveneens pagina's toe aan het
-                  situatieschema als dat nodig is.
-                </p>
-                <div
-                  style={{
-                    background: '#fef2f2',
-                    borderLeft: '4px solid #dc2626',
-                    padding: '12px 16px',
-                    borderRadius: '6px',
-                  }}
+                  Openen vanaf computer
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => handleSaveLocal(false)}
+                  style={primaryButton}
                 >
-                  <strong style={{ color: '#991b1b' }}>⚠️ Opgelet!</strong>
-                  <span style={{ color: '#991b1b' }}>
-                    {' '}
-                    Het is aanbevolen uw werk op te slaan alvorens deze functie te gebruiken!
-                  </span>
-                </div>
+                  {fileAPIobj.hasCurrentFile()
+                    ? `Opslaan in ${fileAPIobj.filename}`
+                    : "Opslaan op computer"}
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => handleSaveLocal(true)}
+                  style={secondaryButton}
+                >
+                  Opslaan als nieuw bestand…
+                </button>
               </div>
+          </section>
+
+          <GoogleDrivePanel
+            format={format}
+            active={backend === "google-drive"}
+            openPickerOnMount={openDrivePickerOnMount}
+            onPickerOpened={onDrivePickerOpened}
+          />
+
+          <section style={cardStyle}>
+            <h2 style={{ marginTop: 0, color: "var(--primary-color)" }}>
+              Een lokale kopie downloaden
+            </h2>
+            <p style={{ color: "var(--text-secondary)", lineHeight: 1.5 }}>
+              Maakt een losse back-up of uitwisselbestand. Uw actieve
+              opslaglocatie en gekoppelde werkbestand blijven ongewijzigd.
+            </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+              <button
+                type="button"
+                onClick={() => downloadCopy("eds")}
+                style={primaryButton}
+              >
+                EDS-kopie downloaden
+              </button>
+              <button
+                type="button"
+                onClick={() => downloadCopy("json")}
+                style={secondaryButton}
+              >
+                JSON-kopie downloaden
+              </button>
             </div>
-          </div>
+          </section>
+
+          <section style={cardStyle}>
+            <h2 style={{ marginTop: 0, color: "var(--primary-color)" }}>
+              Schema samenvoegen
+            </h2>
+            <p style={{ color: "var(--text-secondary)", lineHeight: 1.5 }}>
+              Voeg een tweede lokaal EDS- of JSON-bestand toe aan het huidige
+              schema. Sla uw werk vooraf op.
+            </p>
+            <button
+              type="button"
+              onClick={() => globalThis.importToAppendClicked?.()}
+              style={secondaryButton}
+            >
+              Bestand samenvoegen…
+            </button>
+          </section>
         </div>
       </div>
     </>

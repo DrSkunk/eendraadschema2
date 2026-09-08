@@ -48,22 +48,11 @@ export const StartScreen: React.FC<StartScreenProps> = ({
     if ((globalThis as any).structure) {
       setStructure((globalThis as any).structure);
     }
-    // Navigate to editor
-    onExampleSelect(2); // Use onExampleSelect to go to editor
+    onNewSchema();
   };
 
   const handleLoadFile = async () => {
-    // Trigger the file input click
-    if ((globalThis as any).loadClicked) {
-      await (globalThis as any).loadClicked();
-      // Manually sync the structure to React state after loading
-      setTimeout(() => {
-        if ((globalThis as any).structure) {
-          setStructure((globalThis as any).structure);
-        }
-      }, 100);
-      onLoadFile();
-    }
+    onLoadFile();
   };
 
   return (

@@ -2,6 +2,8 @@ import { Hierarchical_List } from "../Hierarchical_List";
 import { SituationPlan } from "../sitplan/SituationPlan";
 import { Electro_Item } from "../List_Item/Electro_Item";
 import * as pako from "pako";
+import { notifyDocumentStorageStateChanged } from "../storage/SaveDestination";
+import { googleDriveService } from "../storage/GoogleDriveService";
 
 /**
  * Helper that returns a filename with the requested extension.
@@ -86,6 +88,7 @@ export class importExportUsingFileAPI {
   fileHandle: any;
   filename: string;
   lastsaved: string;
+  private boundStructure: object | null;
 
   constructor() {
     this.clear();
@@ -96,6 +99,7 @@ export class importExportUsingFileAPI {
     this.saveNeeded = false;
     this.fileHandle = null;
     this.filename = null;
+    this.boundStructure = null;
   }
 
   updateLastSaved() {
@@ -119,8 +123,25 @@ export class importExportUsingFileAPI {
     //if (input !== lastSaveNeeded) this.updateButtons();
   }
 
-  async readFile() {
-    [this.fileHandle] = await (window as any).showOpenFilePicker({
+  hasCurrentFile(): boolean {
+    return (
+      this.fileHandle !== null &&
+      this.boundStructure === globalThis.structure
+    );
+  }
+
+  rebindToCurrentStructure(): void {
+    if (this.fileHandle) {
+      this.boundStructure = globalThis.structure;
+    }
+  }
+
+  async readFile(): Promise<{
+    content: string;
+    filename: string;
+    handle: any;
+  }> {
+    const [handle] = await (window as any).showOpenFilePicker({
       types: [
         {
           description: "Eendraadschema (.eds, .json)",
@@ -132,17 +153,18 @@ export class importExportUsingFileAPI {
       ],
     });
 
-    const file = await (this.fileHandle as any).getFile();
+    const file = await handle.getFile();
     const contents = await file.text();
+    return { content: contents, filename: file.name, handle };
+  }
 
-    this.filename = file.name;
-    globalThis.structure.properties.filename = file.name;
-
+  bindFile(handle: any, filename: string): void {
+    this.fileHandle = handle;
+    this.filename = filename;
+    this.boundStructure = globalThis.structure;
+    globalThis.structure.properties.filename = filename;
     this.setSaveNeeded(false);
-
-    this.updateLastSaved(); // Needed because EDStoStructure whipes everything
-
-    return contents;
+    this.updateLastSaved();
   }
 
   async saveAs(content: string, format: "eds" | "json" = "eds") {
@@ -177,6 +199,7 @@ export class importExportUsingFileAPI {
     await writable.close();
 
     this.filename = handle.name;
+    this.boundStructure = globalThis.structure;
     globalThis.structure.properties.filename = handle.name;
 
     this.setSaveNeeded(false);
@@ -185,6 +208,9 @@ export class importExportUsingFileAPI {
   }
 
   async save(content: string) {
+    if (!this.hasCurrentFile()) {
+      throw new Error("Er is geen lokaal werkbestand gekoppeld.");
+    }
     await this.saveFile(content, this.fileHandle);
   }
 }
@@ -200,10 +226,16 @@ globalThis.importjson = (event) => {
 
   reader.onload = function () {
     EDStoStructure(reader.result.toString());
+    globalThis.structure.properties.filename = input.files[0].name;
     if (globalThis.structure.sitplan)
       globalThis.structure.sitplan.activePage = 1;
+    notifyDocumentStorageStateChanged();
+    window.dispatchEvent(new Event("local-file-loaded"));
   };
 
+  reader.onerror = () => {
+    window.dispatchEvent(new Event("local-file-load-error"));
+  };
   reader.readAsText(input.files[0]);
 };
 
@@ -232,15 +264,43 @@ globalThis.appendjson = function (event) {
  */
 globalThis.loadClicked = async () => {
   if ((window as any).showOpenFilePicker) {
-    // Use fileAPI
-    let data = await globalThis.fileAPIobj.readFile();
-    EDStoStructure(data);
+    const openedFile = await globalThis.fileAPIobj.readFile();
+    EDStoStructure(openedFile.content);
+    globalThis.fileAPIobj.bindFile(
+      openedFile.handle,
+      openedFile.filename
+    );
+    notifyDocumentStorageStateChanged();
     if (globalThis.structure.sitplan)
       globalThis.structure.sitplan.activePage = 1;
   } else {
-    // Legacy
-    document.getElementById("importfile").click();
-    (document.getElementById("importfile") as HTMLInputElement).value = "";
+    const input = document.getElementById("importfile") as HTMLInputElement;
+    await new Promise<void>((resolve, reject) => {
+      const cleanup = () => {
+        window.removeEventListener("local-file-loaded", handleLoaded);
+        window.removeEventListener("local-file-load-error", handleError);
+        input.removeEventListener("cancel", handleCancel);
+      };
+      const handleLoaded = () => {
+        cleanup();
+        resolve();
+      };
+      const handleError = () => {
+        cleanup();
+        reject(new Error("Het geselecteerde bestand kon niet worden gelezen."));
+      };
+      const handleCancel = () => {
+        cleanup();
+        reject(new DOMException("Bestandskeuze geannuleerd.", "AbortError"));
+      };
+      window.addEventListener("local-file-loaded", handleLoaded, { once: true });
+      window.addEventListener("local-file-load-error", handleError, {
+        once: true,
+      });
+      input.addEventListener("cancel", handleCancel, { once: true });
+      input.value = "";
+      input.click();
+    });
   }
 };
 
@@ -354,10 +414,10 @@ function upgrade_version(mystructure, version) {
  * @param {boolean} saveAs - Indien true, wordt de gebruiker gevraagd waar het bestand moet worden opgeslagen; anders wordt het bestand opgeslagen onder de bekende bestandsnaam.
  * @param {"eds" | "json"} format - Het gewenste bestandsformaat. Standaard EDS.
  */
-globalThis.exportjson = (
+export async function saveCurrentStructureToLocalFile(
   saveAs: boolean = true,
   format: "eds" | "json" = "eds"
-) => {
+): Promise<void> {
   // Indien de boolean false is en de file API is geïnstalleerd, wordt een normale opslag uitgevoerd (bekende bestandsnaam)
   const serialized = serializeCurrentStructure(format);
   const filename = serialized.filename;
@@ -368,6 +428,7 @@ globalThis.exportjson = (
   // moeten we Opslaan als forceren zodat de juiste extensie gebruikt wordt.
   if (
     !saveAs &&
+    globalThis.fileAPIobj.hasCurrentFile() &&
     globalThis.fileAPIobj.fileHandle &&
     globalThis.fileAPIobj.fileHandle.name
   ) {
@@ -380,26 +441,44 @@ globalThis.exportjson = (
 
   if ((window as any).showOpenFilePicker) {
     // Gebruik fileAPI
-    if (globalThis.fileAPIobj.filename == null && saveAs == false)
+    if (!globalThis.fileAPIobj.hasCurrentFile() && saveAs == false)
       saveAs = true; // Default to SaveAs if we have no file name
     if (saveAs) {
-      globalThis.fileAPIobj.saveAs(text, format).then(() => {
-        globalThis.autoSaver.saveManually("TXT0040000" + origtext);
-      });
+      await globalThis.fileAPIobj.saveAs(text, format);
     } else {
-      globalThis.fileAPIobj.save(text).then(() => {
-        globalThis.autoSaver.saveManually("TXT0040000" + origtext);
-      });
+      await globalThis.fileAPIobj.save(text);
     }
   } else {
     // legacy
     const mimeType =
       format === "json" ? "application/json" : "data:text/eds;charset=utf-8";
     download_by_blob(text, filename, mimeType);
-    globalThis.autoSaver.saveManually("TXT0040000" + origtext); // Needs to be as TXT to be able to check with last autosave
   }
 
+  globalThis.autoSaver.saveManually("TXT0040000" + origtext);
   globalThis.propUpload(text);
+}
+
+export function downloadCurrentStructureCopy(
+  format: "eds" | "json" = "eds"
+): void {
+  const serialized = serializeCurrentStructure(format);
+  download_by_blob(
+    serialized.content,
+    serialized.filename,
+    serialized.mimeType
+  );
+}
+
+globalThis.exportjson = (
+  saveAs: boolean = true,
+  format: "eds" | "json" = "eds"
+) => {
+  void saveCurrentStructureToLocalFile(saveAs, format).catch((error) => {
+    if ((error as DOMException)?.name !== "AbortError") {
+      console.error("Lokaal opslaan is mislukt:", error);
+    }
+  });
 };
 
 /* FUNCTION json_to_structure
@@ -561,10 +640,20 @@ function json_to_structure(
   return outstruct;
 }
 
-export function loadFromText(text: string, version: number, redraw = true) {
+export function loadFromText(
+  text: string,
+  version: number,
+  redraw = true,
+  preserveStorageBindings = false
+) {
   const nextStructure = json_to_structure(text, globalThis.structure, version);
   if (globalThis.replaceStructure) globalThis.replaceStructure(nextStructure);
   else globalThis.structure = nextStructure;
+  if (preserveStorageBindings) {
+    globalThis.fileAPIobj?.rebindToCurrentStructure();
+    googleDriveService.rebindToCurrentStructure();
+    notifyDocumentStorageStateChanged();
+  }
   // View switching is now handled by React - no need to call topMenu
   if (redraw == true) {
     // Trigger a redraw if needed
@@ -678,6 +767,8 @@ export function EDStoStructure(
   askUserToSave = false
 ) {
   if (globalThis.autoSaver) globalThis.autoSaver.reset();
+  globalThis.fileAPIobj?.clear();
+  googleDriveService.clearCurrentFile();
 
   let JSONdata = EDStoJson(mystring);
 

@@ -2,6 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useApp, AppView } from '../AppContext';
 import { AutoSaveIndicator } from './AutoSaveIndicator';
 import { getTheme, toggleTheme, Theme } from '../utils/theme';
+import {
+  getStorageBackend,
+  SaveDestination,
+} from '../storage/SaveDestination';
 
 export interface SubMenuItem {
   name: string;
@@ -19,9 +23,10 @@ export interface MenuItem {
 interface TopMenuProps {
   items: MenuItem[];
   currentFilename?: string;
+  saveDestination?: SaveDestination;
 }
 
-export const TopMenu: React.FC<TopMenuProps> = ({ items, currentFilename }) => {
+export const TopMenu: React.FC<TopMenuProps> = ({ items, currentFilename, saveDestination }) => {
   const { currentView, setCurrentView } = useApp();
   const [openSubmenu, setOpenSubmenu] = useState<number | null>(null);
   const [theme, setTheme] = useState<Theme>(getTheme);
@@ -60,6 +65,10 @@ export const TopMenu: React.FC<TopMenuProps> = ({ items, currentFilename }) => {
   const handleThemeToggle = () => {
     setTheme(toggleTheme());
   };
+
+  const destinationLabel = getStorageBackend(
+    saveDestination ?? 'local-file'
+  ).shortLabel;
 
   return (
     <div id="topmenu" ref={menuRef} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 16px' }}>
@@ -119,9 +128,15 @@ export const TopMenu: React.FC<TopMenuProps> = ({ items, currentFilename }) => {
           fontSize: '13px',
           color: 'var(--text-primary)',
           fontWeight: 500,
-          userSelect: 'none'
+          userSelect: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
         }}>
-          📄 {currentFilename || 'Zonder titel'}
+          <span aria-label="Bestandsnaam">📄 {currentFilename || 'Zonder titel'}</span>
+          <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>
+            Opslaan naar: {destinationLabel}
+          </span>
         </div>
         <button
           onClick={handleThemeToggle}
