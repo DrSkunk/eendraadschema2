@@ -62,18 +62,12 @@ const App: React.FC = () => {
     loadRecentFiles();
   }, [currentView]); // Reload when view changes (in case files were added/removed)
 
-  // Update current filename when structure changes
+  // Sync the UI filename from the current structure without polling.
   useEffect(() => {
-    const updateFilename = () => {
-      if (structure && structure.properties) {
-        setCurrentFilename(structure.properties.filename || '');
-      }
-    };
-    updateFilename();
-    
-    // Poll for filename changes every 500ms
-    const interval = setInterval(updateFilename, 500);
-    return () => clearInterval(interval);
+    const nextFilename = structure?.properties?.filename || '';
+    setCurrentFilename((previousFilename) => (
+      previousFilename === nextFilename ? previousFilename : nextFilename
+    ));
   }, [structure]);
 
   useEffect(
@@ -103,7 +97,8 @@ const App: React.FC = () => {
   };
 
   const currentSaveFormat = (): 'eds' | 'json' => {
-    return currentFilename.toLowerCase().endsWith('.json') ? 'json' : 'eds';
+    const resolvedFilename = structure?.properties?.filename || currentFilename || 'eendraadschema.eds';
+    return resolvedFilename.toLowerCase().endsWith('.json') ? 'json' : 'eds';
   };
 
   const saveWithDestination = async (
