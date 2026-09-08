@@ -69,6 +69,7 @@ export const TopMenu: React.FC<TopMenuProps> = ({ items, currentFilename, saveDe
   const destinationLabel = getStorageBackend(
     saveDestination ?? 'local-file'
   ).shortLabel;
+  const editingView = currentView === 'editor' || currentView === 'sitplan';
 
   return (
     <div id="topmenu" ref={menuRef} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 16px' }}>
@@ -112,13 +113,17 @@ export const TopMenu: React.FC<TopMenuProps> = ({ items, currentFilename, saveDe
           type="button"
           title="Ongedaan maken (Ctrl/Cmd+Z)"
           aria-label="Ongedaan maken"
+          disabled={!editingView}
           onClick={() => globalThis.undoClicked?.()}
+          style={{ opacity: editingView ? 1 : 0.45 }}
         >↶</button>
         <button
           type="button"
           title="Herhalen (Ctrl/Cmd+Y)"
           aria-label="Herhalen"
+          disabled={!editingView}
           onClick={() => globalThis.redoClicked?.()}
+          style={{ opacity: editingView ? 1 : 0.45 }}
         >↷</button>
         <div style={{
           padding: '4px 10px',
@@ -157,7 +162,10 @@ export const TopMenu: React.FC<TopMenuProps> = ({ items, currentFilename, saveDe
         >
           {theme === 'dark' ? '☀️' : '🌙'}
         </button>
-        <AutoSaveIndicator autoSaver={globalThis.autoSaver} />
+        <AutoSaveIndicator
+          autoSaver={globalThis.autoSaver}
+          savedLocation={destinationLabel}
+        />
       </div>
     </div>
   );

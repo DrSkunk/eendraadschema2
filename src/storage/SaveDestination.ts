@@ -43,8 +43,10 @@ export function getSaveDestination(): SaveDestination {
 export function getStorageBackend(
   id: StorageBackendId
 ): StorageBackendDefinition {
-  return storageBackends.find((backend) => backend.id === id) ??
-    storageBackends[0];
+  return (
+    storageBackends.find((backend) => backend.id === id) ??
+    storageBackends.find((backend) => backend.id === 'local-file')!
+  );
 }
 
 export function setSaveDestination(destination: SaveDestination): void {

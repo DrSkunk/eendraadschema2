@@ -3,6 +3,7 @@ import { useApp } from '../AppContext';
 import { Hierarchical_List } from '../Hierarchical_List';
 import { DiagramDrawing } from './DiagramDrawing';
 import { ContextMenu } from '../sitplan/ContextMenu';
+import { dialogAlert, dialogConfirm } from '../utils/DialogHelpers';
 
 /**
  * SimpleHierarchyView React Component
@@ -475,7 +476,10 @@ const SimpleHierarchyView: React.FC = () => {
         current = current.getParent();
       }
       if (!parent || !isWithinKring) {
-        window.alert('Een kabelwissel moet binnen een Kring worden toegevoegd.');
+        void dialogAlert(
+          'Kabelwissel toevoegen',
+          'Een kabelwissel moet binnen een Kring worden toegevoegd.'
+        );
         return;
       }
       const newItem = structure.createItem(electroType);
@@ -763,11 +767,11 @@ const SimpleHierarchyView: React.FC = () => {
     }
   };
 
-  const handleDelete = (id?: number) => {
+  const handleDelete = async (id?: number) => {
     const elementId = id || selectedElementId;
     if (!elementId) return;
 
-    if (confirm('Weet je zeker dat je dit element wilt verwijderen?')) {
+    if (await dialogConfirm('Element verwijderen', 'Weet u zeker dat u dit element wilt verwijderen?')) {
       if (typeof (globalThis as any).HLDelete === 'function') {
         (globalThis as any).HLDelete(elementId);
         setSelectedElementId(null);

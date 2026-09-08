@@ -1,8 +1,10 @@
 import {
   downloadCurrentStructureCopy,
+  openStructureFromLocalFile,
   saveCurrentStructureToLocalFile,
 } from "../importExport/importExport";
 import { googleDriveService } from "./GoogleDriveService";
+import { markDocumentSaved } from "./DocumentState";
 import { saveCurrentStructureToGoogleDrive } from "./GoogleDriveActions";
 import {
   getSaveDestination,
@@ -19,7 +21,7 @@ export function currentStorageFormat(): StorageFormat {
 }
 
 export async function openFromLocalFile(): Promise<void> {
-  await globalThis.loadClicked();
+  await openStructureFromLocalFile();
   googleDriveService.clearCurrentFile();
   setSaveDestination("local-file");
   notifyDocumentStorageStateChanged();
@@ -32,11 +34,13 @@ export async function saveToBackend(
 ): Promise<boolean> {
   if (backendId === "google-drive") {
     const savedFile = await saveCurrentStructureToGoogleDrive(format, saveAs);
+    if (savedFile) markDocumentSaved();
     return savedFile !== null;
   }
 
   await saveCurrentStructureToLocalFile(saveAs, format);
   setSaveDestination("local-file");
+  markDocumentSaved();
   notifyDocumentStorageStateChanged();
   return true;
 }

@@ -5,6 +5,7 @@ import {
   notifyDocumentStorageStateChanged,
   setSaveDestination,
 } from './SaveDestination';
+import { markDocumentSaved } from './DocumentState';
 
 function filenameWithExtension(
   filename: string,
@@ -61,6 +62,7 @@ export async function saveCurrentStructureToGoogleDrive(
 
   globalThis.structure.properties.filename = savedFile.name;
   globalThis.autoSaver?.saveManually(`TXT0040000${serialized.rawJson}`);
+  markDocumentSaved();
   globalThis.propUpload?.(serialized.content);
   setSaveDestination('google-drive');
   notifyDocumentStorageStateChanged();

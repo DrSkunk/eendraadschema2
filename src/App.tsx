@@ -10,9 +10,7 @@ import { SitPlanView } from './components/SitPlanView';
 import { PrintView } from './components/PrintView';
 import { DocumentationView } from './components/DocumentationView';
 import { ContactView } from './components/ContactView';
-import { FileLibraryView } from './components/FileLibraryView';
-import { FileLibraryStorage, EdsFileMetadata } from './storage/FileLibraryStorage';
-import { dialogAlert, dialogConfirm } from './utils/DialogHelpers';
+import { dialogAlert } from './utils/DialogHelpers';
 import { initTheme } from './utils/theme';
 import { googleDriveService } from './storage/GoogleDriveService';
 import {
@@ -29,6 +27,13 @@ import {
   openFromLocalFile,
   saveToActiveBackend,
 } from './storage/StorageActions';
+import { EDStoStructure } from './importExport/importExport';
+import {
+  confirmDocumentReplacement,
+  getDocumentState,
+  markDocumentAutosaved,
+  markDocumentDirty,
+} from './storage/DocumentState';
 import '../css/all.css';
 
 // Initialize theme as early as possible to avoid a flash of the wrong theme
@@ -48,28 +53,12 @@ const App: React.FC = () => {
   const [reactInitialized, setReactInitialized] = useState(false);
   const [showRecoveryDialog, setShowRecoveryDialog] = useState(false);
   const [recoveryData, setRecoveryData] = useState<{lastSavedStr: string | null, lastSavedInfo: any} | null>(null);
-  const [recentFiles, setRecentFiles] = useState<EdsFileMetadata[]>([]);
   const [currentFilename, setCurrentFilename] = useState<string>('');
   const [openDrivePickerOnMount, setOpenDrivePickerOnMount] = useState(false);
   const saveInProgress = useRef(false);
   const [saveDestination, setSaveDestinationState] = useState<SaveDestination>(
     getSaveDestination
   );
-
-  // Load recent files from library
-  useEffect(() => {
-    const loadRecentFiles = async () => {
-      const storage = new FileLibraryStorage();
-      const files = await storage.listFiles();
-      // Get the 5 most recent files (excluding autosaves)
-      const recent = files
-        .filter(f => !f.isAutoSave)
-        .sort((a, b) => new Date(b.dateModified).getTime() - new Date(a.dateModified).getTime())
-        .slice(0, 5);
-      setRecentFiles(recent);
-    };
-    loadRecentFiles();
-  }, [currentView]); // Reload when view changes (in case files were added/removed)
 
   // Sync the UI filename from the current structure without polling.
   useEffect(() => {
@@ -96,6 +85,16 @@ const App: React.FC = () => {
     globalThis.currentReactView = currentView;
   }, [currentView]);
 
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!getDocumentState().dirty) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
   // File operations
   const clearDocumentBindings = () => {
     fileAPIobj.clear();
@@ -104,7 +103,9 @@ const App: React.FC = () => {
   };
 
   const handleNewFile = async () => {
-    const confirmed = await dialogConfirm('Nieuw schema', 'Weet u zeker dat u een nieuw schema wilt maken? Niet-opgeslagen wijzigingen gaan verloren.');
+    const confirmed = await confirmDocumentReplacement(
+      'een nieuw schema starten'
+    );
     if (confirmed) {
       clearDocumentBindings();
       globalThis.read_settings?.();
@@ -113,6 +114,9 @@ const App: React.FC = () => {
   };
 
   const handleOpenFile = async () => {
+    if (!(await confirmDocumentReplacement('een ander bestand openen'))) {
+      return;
+    }
     try {
       await openFromLocalFile();
       setCurrentView('editor');
@@ -172,23 +176,13 @@ const App: React.FC = () => {
         { name: "Nieuw", icon: "➕", action: handleNewFile },
         { name: "Openen vanaf computer...", icon: "💻", action: handleOpenFile },
         ...(googleDriveService.isConfigured() ? [{ name: "Openen vanuit Google Drive...", icon: "☁️", action: handleOpenFromDrive }] : []),
-        { name: "Bibliotheek...", icon: "📚", action: () => setCurrentView('library') },
         { name: "Opslaglocatie en bestanden...", icon: "⚙️", action: handleFileSettings },
         { name: "─────────", icon: "", action: () => {} },
         { name: "Opslaan", icon: "💾", action: handleSave },
         { name: "Opslaan als...", icon: "📁", action: handleSaveAs },
         { name: "─────────", icon: "", action: () => {} },
         { name: "EDS-kopie downloaden", icon: "⬇️", action: () => downloadCopy('eds') },
-        { name: "JSON-kopie downloaden", icon: "⬇️", action: () => downloadCopy('json') },
-        ...(recentFiles.length > 0 ? [
-          { name: "─────────", icon: "", action: () => {} },
-          { name: "Recente bestanden:", icon: "🕐", action: () => {} },
-          ...recentFiles.map(file => ({
-            name: `  ${file.filename}`,
-            icon: "📄",
-            action: () => handleFileOpen(file.content, file.filename)
-          }))
-        ] : [])
+        { name: "JSON-kopie downloaden", icon: "⬇️", action: () => downloadCopy('json') }
       ]
     },
     { name: "Eéndraadschema", icon: "⚡", view: "editor" },
@@ -233,7 +227,6 @@ const App: React.FC = () => {
       const viewMap: { [key: string]: AppView } = {
         'Nieuw': 'start',
         'Bestand': 'file',
-        'Bibliotheek': 'library',
         'Eéndraadschema': 'editor',
         'Situatieschema': 'sitplan',
         'Print': 'print',
@@ -249,6 +242,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const handleUndoRedo = (event: KeyboardEvent) => {
+      if (currentView !== 'editor' && currentView !== 'sitplan') return;
       if (!(event.ctrlKey || event.metaKey)) return;
       const target = event.target as HTMLElement | null;
       if (target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
@@ -262,16 +256,15 @@ const App: React.FC = () => {
     };
     document.addEventListener('keydown', handleUndoRedo);
     return () => document.removeEventListener('keydown', handleUndoRedo);
-  }, []);
+  }, [currentView]);
 
   const handleRecoverAutosave = async () => {
     if (recoveryData && recoveryData.lastSavedStr && structure) {
       try {
-        const EDStoStructure = (globalThis as any).EDStoStructure;
-        if (EDStoStructure) {
-          clearDocumentBindings();
-          // Load the autosaved structure
-          EDStoStructure(recoveryData.lastSavedStr, true, false);
+        clearDocumentBindings();
+        EDStoStructure(recoveryData.lastSavedStr, true, false);
+        markDocumentDirty();
+        markDocumentAutosaved();
           
           // Close the dialog
           setShowRecoveryDialog(false);
@@ -280,10 +273,7 @@ const App: React.FC = () => {
           // Switch to editor view
           setCurrentView('editor');
           
-          console.log('Autosave recovered successfully');
-        } else {
-          console.error('EDStoStructure function not found');
-        }
+        console.log('Autosave recovered successfully');
       } catch (error) {
         console.error('Error recovering autosave:', error);
         await dialogAlert('Fout bij autosave', 'Er is een fout opgetreden bij het herstellen van de autosave.');
@@ -291,13 +281,23 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDiscardAutosave = () => {
-    setShowRecoveryDialog(false);
-    setRecoveryData(null);
+  const handleDiscardAutosave = async () => {
+    try {
+      await globalThis.autoSaver?.discardRecovery();
+      setShowRecoveryDialog(false);
+      setRecoveryData(null);
+    } catch (error) {
+      console.error('Autosave discard failed:', error);
+      await dialogAlert(
+        'Herstelkopie verwijderen mislukt',
+        error instanceof Error ? error.message : String(error)
+      );
+    }
   };
 
   const handleExampleSelect = (exampleNumber: number) => {
     clearDocumentBindings();
+    markDocumentDirty();
     setCurrentView('editor');
   };
 
@@ -307,24 +307,6 @@ const App: React.FC = () => {
   };
 
   const handleLoadFile = () => void handleOpenFile();
-
-  const handleFileOpen = async (content: string, filename: string) => {
-    try {
-      const EDStoStructure = (globalThis as any).EDStoStructure;
-      if (EDStoStructure) {
-        setSaveDestination('local-file');
-        clearDocumentBindings();
-        EDStoStructure(content, true, false);
-        globalThis.structure.properties.filename = filename;
-        setCurrentFilename(filename);
-        notifyDocumentStorageStateChanged();
-        setCurrentView('editor');
-      }
-    } catch (error) {
-      console.error('Error opening file from library:', error);
-      await dialogAlert('Fout bij openen', 'Er is een fout opgetreden bij het openen van het bestand.');
-    }
-  };
 
   // Always render with menu
   return (
@@ -411,11 +393,6 @@ const App: React.FC = () => {
         <FilePage
           openDrivePickerOnMount={openDrivePickerOnMount}
           onDrivePickerOpened={() => setOpenDrivePickerOnMount(false)}
-        />
-      ) : currentView === 'library' ? (
-        <FileLibraryView 
-          onFileOpen={handleFileOpen}
-          onBack={() => setCurrentView('start')}
         />
       ) : currentView === 'editor' ? (
         <EditorView />

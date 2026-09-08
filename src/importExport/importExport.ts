@@ -4,6 +4,11 @@ import { Electro_Item } from "../List_Item/Electro_Item";
 import * as pako from "pako";
 import { notifyDocumentStorageStateChanged } from "../storage/SaveDestination";
 import { googleDriveService } from "../storage/GoogleDriveService";
+import {
+  markDocumentDirty,
+  markDocumentSaved,
+  resetDocumentState,
+} from "../storage/DocumentState";
 
 /**
  * Helper that returns a filename with the requested extension.
@@ -262,7 +267,7 @@ globalThis.appendjson = function (event) {
  *
  * @returns {Promise<void>} Een promise die wordt opgelost wanneer het bestand is geladen en verwerkt.
  */
-globalThis.loadClicked = async () => {
+export async function openStructureFromLocalFile(): Promise<void> {
   if ((window as any).showOpenFilePicker) {
     const openedFile = await globalThis.fileAPIobj.readFile();
     EDStoStructure(openedFile.content);
@@ -302,7 +307,9 @@ globalThis.loadClicked = async () => {
       input.click();
     });
   }
-};
+}
+
+globalThis.loadClicked = openStructureFromLocalFile;
 
 /**
  * function importToAppendClicked()
@@ -310,10 +317,12 @@ globalThis.loadClicked = async () => {
  * Vraagt om een EDS bestand op de machine te kiezen en voegt de inhoud toe aan het reeds geopende schema.
  * We gebruiken hier bewust niet de fileAPI aangezien die reeds gebruikt wordt voor het reeds geopende schema.
  */
-globalThis.importToAppendClicked = async () => {
+export async function appendStructureFromLocalFile(): Promise<void> {
   document.getElementById("appendfile").click();
   (document.getElementById("appendfile") as HTMLInputElement).value = "";
-};
+}
+
+globalThis.importToAppendClicked = appendStructureFromLocalFile;
 
 /* FUNCTION upgrade_version
 
@@ -456,6 +465,7 @@ export async function saveCurrentStructureToLocalFile(
   }
 
   globalThis.autoSaver.saveManually("TXT0040000" + origtext);
+  markDocumentSaved();
   globalThis.propUpload(text);
 }
 
@@ -797,7 +807,10 @@ export function EDStoStructure(
     globalThis.autoSaver.saveManually();
   if (askUserToSave) {
     globalThis.autoSaver.forceHasChangesSinceLastManualSave();
+    markDocumentDirty();
     // React components will update automatically
+  } else {
+    resetDocumentState(false);
   }
 }
 

@@ -17,6 +17,11 @@ import {
   StorageFormat,
 } from "../storage/StorageActions";
 import { dialogAlert, dialogPrompt } from "../utils/DialogHelpers";
+import {
+  confirmDocumentReplacement,
+  markDocumentDirty,
+} from "../storage/DocumentState";
+import { appendStructureFromLocalFile } from "../importExport/importExport";
 
 const cardStyle: React.CSSProperties = {
   background: "var(--surface)",
@@ -115,6 +120,9 @@ const FilePage: React.FC<FilePageProps> = ({
 
   const handleOpenLocal = () =>
     run(async () => {
+      if (!(await confirmDocumentReplacement("een ander lokaal bestand openen"))) {
+        return;
+      }
       await openFromLocalFile();
       setCurrentView("editor");
     });
@@ -131,6 +139,7 @@ const FilePage: React.FC<FilePageProps> = ({
     setDisableCompression(checked);
     if (structure?.properties) {
       structure.properties.disableEDSCompression = checked;
+      markDocumentDirty();
     }
   };
 
@@ -150,6 +159,7 @@ const FilePage: React.FC<FilePageProps> = ({
         throw new Error("De documentnaam mag niet leeg zijn.");
       }
       structure.properties.filename = trimmedName;
+      markDocumentDirty();
       notifyDocumentStorageStateChanged();
     });
 
@@ -171,7 +181,16 @@ const FilePage: React.FC<FilePageProps> = ({
             </h2>
             <p style={{ color: "var(--text-secondary)", lineHeight: 1.5 }}>
               <strong>Opslaan</strong> werkt het bestand bij op de gekozen
-              locatie. U kunt op elk moment naar een andere backend wisselen.
+              locatie. Opslaan via een andere kaart maakt of synchroniseert
+              daar een gekoppelde kopie en maakt die locatie actief. Bestaande
+              koppelingen blijven beschikbaar wanneer u terugschakelt; andere
+              kopieën worden niet automatisch bijgewerkt.
+            </p>
+            <p style={{ color: "var(--text-secondary)", lineHeight: 1.5 }}>
+              Tijdens het bewerken wordt automatisch een lokale herstelkopie
+              in deze browser bijgehouden. Deze tijdelijke herstelkopie is geen
+              opslaglocatie en vervangt opslaan op uw computer of Google Drive
+              niet.
             </p>
             <div
               style={{
@@ -391,7 +410,7 @@ const FilePage: React.FC<FilePageProps> = ({
             </p>
             <button
               type="button"
-              onClick={() => globalThis.importToAppendClicked?.()}
+              onClick={() => void appendStructureFromLocalFile()}
               style={secondaryButton}
             >
               Bestand samenvoegen…

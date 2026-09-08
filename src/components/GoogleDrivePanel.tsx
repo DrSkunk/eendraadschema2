@@ -15,6 +15,7 @@ import {
   onDocumentStorageStateChange,
   setSaveDestination,
 } from '../storage/SaveDestination';
+import { confirmDocumentReplacement } from '../storage/DocumentState';
 
 interface GoogleDrivePanelProps {
   format: 'eds' | 'json';
@@ -97,6 +98,9 @@ export const GoogleDrivePanel: React.FC<GoogleDrivePanelProps> = ({
 
   const handleOpen = (file: GoogleDriveFile) =>
     run(async () => {
+      if (!(await confirmDocumentReplacement('een ander Drive-bestand openen'))) {
+        return;
+      }
       const content = await googleDriveService.downloadFile(file);
       EDStoStructure(content, true, false);
       googleDriveService.setCurrentFile(file);

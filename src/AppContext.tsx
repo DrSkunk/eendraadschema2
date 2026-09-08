@@ -7,7 +7,7 @@ import { SimpleHierarchyView } from './SimpleHierarchyView';
 import { Hierarchical_List } from './Hierarchical_List';
 import { installWebMCPTools } from './webmcp';
 
-export type AppView = 'start' | 'file' | 'editor' | 'sitplan' | 'print' | 'documentation' | 'contact' | 'library';
+export type AppView = 'start' | 'file' | 'editor' | 'sitplan' | 'print' | 'documentation' | 'contact';
 
 interface AppContextType {
   session: Session;

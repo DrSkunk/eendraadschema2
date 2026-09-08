@@ -1,6 +1,7 @@
 import { loadFromText } from "./importExport/importExport";
 import { showSituationPlanPage } from "./sitplan/SituationPlanView";
 import { printsvg } from "./print/print";
+import { markDocumentDirty } from "./storage/DocumentState";
 
 class jsonStore {
   private maxSteps: number;
@@ -163,6 +164,7 @@ export class undoRedo {
     }
 
     this.replaceStringStoreBySVGs();
+    markDocumentDirty();
 
     // React components will update automatically
   }
@@ -218,6 +220,7 @@ export class undoRedo {
         printsvg();
         break;
     }
+    markDocumentDirty();
   }
 
   undo() {
